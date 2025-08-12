@@ -205,7 +205,7 @@ const Shifts = ({ user }) => {
               Create Shift
             </button>
           )}
-        </div>
+        </div>  
       </div>
 
       {/* Conflicts Banner */}
