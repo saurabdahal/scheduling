@@ -36,7 +36,7 @@ const UserDrawer = ({
         role: selectedEmployee.role || 'Employee',
         hourlyRate: selectedEmployee.hourlyRate || '',
         skills: selectedEmployee.skills || [],
-        availability: selectedEmployee.availability || formData.availability
+        availability: selectedEmployee.availability 
       });
     } else {
       setFormData({
