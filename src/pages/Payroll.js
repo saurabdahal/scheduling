@@ -17,37 +17,52 @@ const Payroll = ({ user }) => {
   function generateDemoShifts() {
     const shifts = [];
     let shiftId = 1;
-    const year = 2025;
-    const month = 5; // June (0-based, 5 = June)
-    demoEmployees.forEach(emp => {
-      // For each day in June
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateObj = new Date(year, month, day);
-        const weekday = dateObj.getDay();
-        if (weekday === 0) continue; // skip Sundays
-        // Overtime on Saturdays
-        const isSaturday = weekday === 6;
-        const startHour = emp.id % 2 === 0 ? 9 : 8;
-        const endHour = emp.id % 2 === 0 ? 17 : 16;
-        const otStart = startHour;
-        const otEnd = isSaturday ? endHour + 2 : endHour;
-        const actualStartHour = otStart + (Math.random() * 0.5 - 0.25);
-        const actualEndHour = otEnd + (Math.random() * 0.5 - 0.25);
-        shifts.push({
-          id: shiftId++,
-          employeeId: emp.id,
-          employeeName: emp.name,
-          date: format(dateObj, 'yyyy-MM-dd'),
-          startTime: `${otStart.toString().padStart(2, '0')}:00`,
-          endTime: `${otEnd.toString().padStart(2, '0')}:00`,
-          actualStartTime: `${Math.floor(actualStartHour).toString().padStart(2, '0')}:${Math.floor((actualStartHour % 1) * 60).toString().padStart(2, '0')}`,
-          actualEndTime: `${Math.floor(actualEndHour).toString().padStart(2, '0')}:${Math.floor((actualEndHour % 1) * 60).toString().padStart(2, '0')}`,
-          status: 'completed',
-          hourlyRate: emp.hourlyRate
+    
+    // Generate shifts for the current week and a few weeks around it
+    const today = new Date();
+    const currentWeekStart = startOfWeek(today, { weekStartsOn: 1 });
+    
+    // Generate shifts for current week and 2 weeks before/after
+    for (let weekOffset = -2; weekOffset <= 2; weekOffset++) {
+      const weekStart = addWeeks(currentWeekStart, weekOffset);
+      
+      // Generate shifts for each day of the week (Monday to Friday)
+      for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
+        const dateObj = addDays(weekStart, dayOffset);
+        
+        demoEmployees.forEach(emp => {
+          // Standard 8-hour shift: 9 AM - 5 PM
+          const startHour = 9;
+          const endHour = 17;
+          
+          // Add some realistic variation in actual start/end times
+          const actualStartHour = startHour + (Math.random() * 0.5 - 0.25); // ±15 minutes
+          const actualEndHour = endHour + (Math.random() * 0.5 - 0.25); // ±15 minutes
+          
+          // Determine status based on date
+          let status = 'scheduled';
+          if (dateObj < today) {
+            status = 'completed';
+          } else if (dateObj.toDateString() === today.toDateString()) {
+            status = 'in-progress';
+          }
+          
+          shifts.push({
+            id: shiftId++,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            date: format(dateObj, 'yyyy-MM-dd'),
+            startTime: `${startHour.toString().padStart(2, '0')}:00`,
+            endTime: `${endHour.toString().padStart(2, '0')}:00`,
+            actualStartTime: `${Math.floor(actualStartHour).toString().padStart(2, '0')}:${Math.floor((actualStartHour % 1) * 60).toString().padStart(2, '0')}`,
+            actualEndTime: `${Math.floor(actualEndHour).toString().padStart(2, '0')}:${Math.floor((actualEndHour % 1) * 60).toString().padStart(2, '0')}`,
+            status,
+            hourlyRate: emp.hourlyRate
+          });
         });
       }
-    });
+    }
+    
     return shifts;
   }
   // Always use all demo shifts
@@ -55,7 +70,14 @@ const Payroll = ({ user }) => {
   // For employees, only show their own info in the UI, but use all demo shifts for calculations
   const employees = isAdminOrManager ? demoEmployees : demoEmployees.filter(e => e.id === user.id);
 
-  const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [selectedEmployees, setSelectedEmployees] = useState(() => {
+    // Default to all employees for admin/manager, or current user for employees
+    if (isAdminOrManager) {
+      return demoEmployees.map(emp => emp.id);
+    } else {
+      return [user.id];
+    }
+  });
   const [payrollPeriod, setPayrollPeriod] = useState('week');
   const [customDateRange, setCustomDateRange] = useState({
     startDate: format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
@@ -70,7 +92,21 @@ const Payroll = ({ user }) => {
   useEffect(() => {
     console.log('Generated shifts:', shifts);
     console.log('Current date range:', getDateRange());
-  }, []);
+    console.log('Selected employees:', selectedEmployees);
+    
+    // Auto-generate payroll data for the current week
+    if (selectedEmployees.length > 0) {
+      generatePayroll();
+    }
+  }, [selectedEmployees]);
+
+  // Auto-generate payroll when date range changes
+  useEffect(() => {
+    if (selectedEmployees.length > 0) {
+      console.log('Date range changed, regenerating payroll...');
+      generatePayroll();
+    }
+  }, [payrollPeriod, customDateRange]);
 
   // Calculate hours worked
   const calculateHours = (startTime, endTime) => {
@@ -371,6 +407,28 @@ const Payroll = ({ user }) => {
         </div>
       </div>
 
+      {/* Current Date Range Display */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-sm font-medium text-blue-800">Current Payroll Period:</span>
+          </div>
+          <div className="text-right">
+            <div className="text-lg font-semibold text-blue-900">
+              {format(parseISO(getDateRange().startDate), 'MMM dd, yyyy')} - {format(parseISO(getDateRange().endDate), 'MMM dd, yyyy')}
+            </div>
+            <div className="text-sm text-blue-700">
+              {payrollPeriod === 'week' ? 'This Week' : 
+               payrollPeriod === 'biweekly' ? 'Bi-Weekly' : 
+               payrollPeriod === 'month' ? 'This Month' : 'Custom Range'}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <div className="bg-white rounded-lg shadow p-6">
@@ -586,6 +644,42 @@ const Payroll = ({ user }) => {
               </tfoot>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Empty State Message */}
+      {payrollData.length === 0 && selectedEmployees.length > 0 && !noShiftsFound && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+          <svg className="w-12 h-12 text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h3 className="text-lg font-medium text-blue-900 mb-2">Ready to Generate Payroll</h3>
+          <p className="text-blue-700 mb-4">
+            Click "Generate Payroll" to calculate pay for the selected employees and period.
+          </p>
+          <div className="text-sm text-blue-600">
+            <p>Current period: {format(parseISO(getDateRange().startDate), 'MMM dd, yyyy')} - {format(parseISO(getDateRange().endDate), 'MMM dd, yyyy')}</p>
+            <p>Selected employees: {selectedEmployees.length}</p>
+          </div>
+        </div>
+      )}
+
+      {/* No Employees Selected Message */}
+      {selectedEmployees.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+          <svg className="w-12 h-12 text-yellow-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+          </svg>
+          <h3 className="text-lg font-medium text-yellow-900 mb-2">No Employees Selected</h3>
+          <p className="text-yellow-700 mb-4">
+            Please select at least one employee to generate payroll data.
+          </p>
+          <button
+            onClick={selectAllEmployees}
+            className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700"
+          >
+            Select All Employees
+          </button>
         </div>
       )}
 

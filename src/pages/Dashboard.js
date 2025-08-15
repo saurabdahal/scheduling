@@ -7,12 +7,12 @@ const Dashboard = ({ user }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
   
   const [analytics, setAnalytics] = useState({
-    totalEmployees: 1,
+    totalEmployees: 5,
     totalShifts: 22,
-    hoursScheduled: 176,
-    hoursWorked: 176,
+    hoursScheduled: 38,
+    hoursWorked: 36,
     laborCost: 2640,
-    upcomingShifts: 0
+    upcomingShifts: 3
   });
 
   const [recentShifts, setRecentShifts] = useState([
@@ -20,7 +20,7 @@ const Dashboard = ({ user }) => {
       id: 1,
       employeeName: 'Bob Smith',
       role: 'Cashier',
-      date: '2025-06-02',
+      date: '2025-08-15',
       startTime: '09:00',
       endTime: '17:00',
       status: 'completed'
@@ -29,7 +29,34 @@ const Dashboard = ({ user }) => {
       id: 2,
       employeeName: 'Bob Smith',
       role: 'Cashier',
-      date: '2025-06-03',
+      date: '2025-08-14',
+      startTime: '09:00',
+      endTime: '17:00',
+      status: 'completed'
+    },
+    {
+      id: 3,
+      employeeName: 'Bob Smith',
+      role: 'Cashier',
+      date: '2025-08-13',
+      startTime: '09:00',
+      endTime: '17:00',
+      status: 'completed'
+    },
+    {
+      id: 4,
+      employeeName: 'Bob Smith',
+      role: 'Cashier',
+      date: '2025-08-12',
+      startTime: '09:00',
+      endTime: '17:00',
+      status: 'completed'
+    },
+    {
+      id: 5,
+      employeeName: 'Bob Smith',
+      role: 'Cashier',
+      date: '2025-08-11',
       startTime: '09:00',
       endTime: '17:00',
       status: 'completed'
@@ -85,7 +112,7 @@ const Dashboard = ({ user }) => {
       </div>
 
       {/* Analytics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isAdminOrManager && (
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
@@ -133,22 +160,6 @@ const Dashboard = ({ user }) => {
             </div>
           </div>
         </div>
-
-        {isAdminOrManager && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Labor Cost</p>
-                <p className="text-2xl font-semibold text-gray-900">${analytics.laborCost}</p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Main Content Grid */}
@@ -267,7 +278,7 @@ const Dashboard = ({ user }) => {
                 <svg className="w-8 h-8 text-purple-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                 </svg>
-                <p className="text-sm font-medium text-gray-900">Add Employee</p>
+                <p className="text-sm font-medium text-gray-900">Staff Management</p>
               </div>
             </button>
           )}

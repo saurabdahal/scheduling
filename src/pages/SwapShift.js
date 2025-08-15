@@ -2,16 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { format, parseISO, addDays } from 'date-fns';
 import NotificationBanner from '../components/NotificationBanner';
 
-const SwapShift = ({ user }) => {
+const SwapShift = ({ user, employees = [] }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
   const [shifts, setShifts] = useState([
     {
       id: 1,
       employeeId: 1,
       employeeName: 'Alice Johnson',
-      date: '2024-01-15',
-      startTime: '08:00',
-      endTime: '16:00',
+      date: '2025-08-18',
+      startTime: '09:00',
+      endTime: '17:00',
       role: 'barista',
       status: 'scheduled'
     },
@@ -19,7 +19,7 @@ const SwapShift = ({ user }) => {
       id: 2,
       employeeId: 2,
       employeeName: 'Bob Smith',
-      date: '2024-01-16',
+      date: '2025-08-19',
       startTime: '09:00',
       endTime: '17:00',
       role: 'cashier',
@@ -29,16 +29,12 @@ const SwapShift = ({ user }) => {
       id: 3,
       employeeId: 3,
       employeeName: 'Carol Davis',
-      date: '2024-01-17',
-      startTime: '07:00',
-      endTime: '15:00',
+      date: '2025-08-20',
+      startTime: '09:00',
+      endTime: '17:00',
       role: 'kitchen',
       status: 'scheduled'
     }
-  ]);
-
-  const [employees, setEmployees] = useState([
-    { id: 2, name: 'Bob Smith', skills: ['cashier', 'cleaning'] }
   ]);
 
   const [swapRequests, setSwapRequests] = useState([
@@ -47,22 +43,22 @@ const SwapShift = ({ user }) => {
       requesterId: 1,
       requesterName: 'Alice Johnson',
       shiftId: 1,
-      shiftDate: '2024-01-15',
-      shiftTime: '08:00-16:00',
+      shiftDate: '2025-08-18',
+      shiftTime: '09:00-17:00',
       reason: 'Doctor appointment',
       status: 'pending',
-      createdAt: '2024-01-10T10:00:00Z'
+      createdAt: '2025-08-15T10:00:00Z'
     },
     {
       id: 2,
       requesterId: 2,
       requesterName: 'Bob Smith',
       shiftId: 2,
-      shiftDate: '2024-01-16',
+      shiftDate: '2025-08-19',
       shiftTime: '09:00-17:00',
       reason: 'Family emergency',
       status: 'approved',
-      createdAt: '2024-01-09T14:30:00Z'
+      createdAt: '2025-08-14T14:30:00Z'
     }
   ]);
 
@@ -71,21 +67,21 @@ const SwapShift = ({ user }) => {
       id: 1,
       employeeId: 1,
       employeeName: 'Alice Johnson',
-      startDate: '2024-01-20',
-      endDate: '2024-01-22',
+      startDate: '2025-08-25',
+      endDate: '2025-08-27',
       reason: 'Vacation',
       status: 'pending',
-      createdAt: '2024-01-08T09:00:00Z'
+      createdAt: '2025-08-13T09:00:00Z'
     },
     {
       id: 2,
       employeeId: 3,
       employeeName: 'Carol Davis',
-      startDate: '2024-01-25',
-      endDate: '2024-01-25',
+      startDate: '2025-08-30',
+      endDate: '2025-08-30',
       reason: 'Personal day',
       status: 'approved',
-      createdAt: '2024-01-07T16:00:00Z'
+      createdAt: '2025-08-12T16:00:00Z'
     }
   ]);
 

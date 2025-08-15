@@ -51,9 +51,15 @@ const ScheduleGrid = ({
     });
   };
 
-  const getEmployeeName = (employeeId) => {
-    const employee = employees.find(emp => emp.id === employeeId);
-    return employee ? employee.name : 'Unknown';
+  const getEmployeeName = (shift) => {
+    // First check if the shift has the employee name directly
+    if (shift.employeeName) {
+      return shift.employeeName;
+    }
+    
+    // Fall back to looking up the employee by ID
+    const employee = employees.find(emp => emp.id === shift.employeeId);
+    return employee ? employee.name : `Employee ${shift.employeeId}`;
   };
 
   const getRoleColor = (role) => {
@@ -109,7 +115,7 @@ const ScheduleGrid = ({
                       onDragStart={(e) => handleDragStart(e, shift)}
                       className={`${getRoleColor(shift.role)} p-2 rounded border text-xs cursor-move hover:shadow-md transition-shadow`}
                     >
-                      <div className="font-medium">{getEmployeeName(shift.employeeId)}</div>
+                      <div className="font-medium">{getEmployeeName(shift)}</div>
                       <div className="text-xs opacity-75">{shift.role}</div>
                       <div className="text-xs opacity-75">
                         {shift.startTime} - {shift.endTime}

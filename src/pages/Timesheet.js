@@ -41,15 +41,18 @@ const Timesheet = ({ user }) => {
     let shiftId = 1;
     let date = new Date(weekStart);
     const now = new Date();
+    
     while (date <= weekEnd) {
       const weekday = date.getDay();
-      if (weekday !== 0) { // skip Sundays
+      // Only create shifts for Monday to Friday (weekdays 1-5)
+      if (weekday >= 1 && weekday <= 5) {
         demoEmployees.forEach(emp => {
           let status = 'scheduled';
           const shiftStart = new Date(date);
           shiftStart.setHours(9, 0, 0, 0);
           const shiftEnd = new Date(date);
           shiftEnd.setHours(17, 0, 0, 0);
+          
           if (date < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
             status = 'completed';
           } else if (
@@ -65,6 +68,7 @@ const Timesheet = ({ user }) => {
               status = 'completed';
             }
           }
+          
           shifts.push({
             id: shiftId++,
             employeeId: emp.id,

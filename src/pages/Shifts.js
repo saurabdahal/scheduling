@@ -1,41 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { format, addWeeks, subWeeks, parseISO } from 'date-fns';
+import { format, addWeeks, subWeeks, parseISO, startOfWeek, addDays } from 'date-fns';
 import ScheduleGrid from '../components/ScheduleGrid';
 import ShiftCard from '../components/ShiftCard';
 import NotificationBanner from '../components/NotificationBanner';
 
-const Shifts = ({ user }) => {
+const Shifts = ({ user, employees = [] }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
-  const demoEmployees = [
-    { id: 1, name: 'Alice Johnson', role: 'Employee', skills: ['barista', 'cashier'], hourlyRate: 18 },
-    { id: 2, name: 'Bob Smith', role: 'Employee', skills: ['cashier', 'cleaning'], hourlyRate: 15 },
-    { id: 3, name: 'Carol Davis', role: 'Employee', skills: ['kitchen', 'food-prep'], hourlyRate: 16 },
-    { id: 4, name: 'David Wilson', role: 'Employee', skills: ['barista', 'coffee-making'], hourlyRate: 15 },
-    { id: 5, name: 'Emma Brown', role: 'Employee', skills: ['cashier'], hourlyRate: 14.5 }
-  ];
+  
   const [currentDate, setCurrentDate] = useState(new Date());
   const [shifts, setShifts] = useState([]);
-  const [employees, setEmployees] = useState(demoEmployees);
 
   useEffect(() => {
-    setShifts(generateDemoShiftsForWeek(currentDate));
-  }, [currentDate]);
+    if (employees.length > 0) {
+      setShifts(generateDemoShiftsForWeek(currentDate, employees));
+    }
+  }, [currentDate, employees]);
 
-  function generateDemoShiftsForWeek(dateInWeek) {
-    const weekStart = new Date(dateInWeek);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Monday
+  function generateDemoShiftsForWeek(dateInWeek, employeesList) {
+    const weekStart = startOfWeek(dateInWeek, { weekStartsOn: 1 });
     const shifts = [];
     let shiftId = 1;
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(weekStart);
-      date.setDate(weekStart.getDate() + i);
-      if (date.getDay() === 0) continue; // skip Sundays
-      demoEmployees.forEach(emp => {
-        let status = 'completed';
-        if (date.getMonth() === 6 && date.getFullYear() === 2025) {
-          if (date.getDate() % 3 === 0) status = 'in-progress';
-          else if (date.getDate() % 2 === 0) status = 'scheduled';
+    
+    // Generate shifts for each day of the week (Monday to Friday)
+    for (let i = 0; i < 5; i++) {
+      const date = addDays(weekStart, i);
+      
+      // Create shifts for each employee
+      employeesList.forEach(emp => {
+        let status = 'scheduled';
+        
+        // Determine status based on date (past = completed, current = in-progress, future = scheduled)
+        const today = new Date();
+        const shiftDate = new Date(date);
+        
+        if (shiftDate < today) {
+          status = 'completed';
+        } else if (shiftDate.toDateString() === today.toDateString()) {
+          status = 'in-progress';
         }
+        
+        // Standard 8-hour shift: 9 AM - 5 PM
         shifts.push({
           id: shiftId++,
           employeeId: emp.id,
@@ -43,12 +47,13 @@ const Shifts = ({ user }) => {
           date: date.toISOString().slice(0, 10),
           startTime: '09:00',
           endTime: '17:00',
-          role: emp.skills[0],
+          role: (emp.departments || emp.skills || [])[0], // Use first department/skill as role
           status,
           notes: '',
         });
       });
     }
+    
     return shifts;
   }
 
@@ -86,10 +91,11 @@ const Shifts = ({ user }) => {
       );
       
       if (overlapping.length > 0) {
+        const employeeName = shift.employeeName || employees.find(e => e.id === shift.employeeId)?.name || `Employee ${shift.employeeId}`;
         newConflicts.push({
           type: 'overlap',
           shiftId: shift.id,
-          message: `Overlapping shifts for ${employees.find(e => e.id === shift.employeeId)?.name}`
+          message: `Overlapping shifts for ${employeeName}`
         });
       }
 
@@ -106,10 +112,11 @@ const Shifts = ({ user }) => {
       }, 0);
 
       if (totalHours > 8) {
+        const employeeName = shift.employeeName || employees.find(e => e.id === shift.employeeId)?.name || `Employee ${shift.employeeId}`;
         newConflicts.push({
           type: 'overtime',
           shiftId: shift.id,
-          message: `Overtime alert: ${employees.find(e => e.id === shift.employeeId)?.name} has ${totalHours.toFixed(1)} hours`
+          message: `Overtime alert: ${employeeName} has ${totalHours.toFixed(1)} hours`
         });
       }
     });
@@ -123,9 +130,13 @@ const Shifts = ({ user }) => {
       return;
     }
 
+    // Get the employee details to include the name
+    const selectedEmployee = employees.find(emp => emp.id === parseInt(shiftForm.employeeId));
+    
     const newShift = {
       id: Date.now(),
       ...shiftForm,
+      employeeName: selectedEmployee.name, // Include the employee name
       status: 'scheduled'
     };
 
@@ -143,7 +154,13 @@ const Shifts = ({ user }) => {
   };
 
   const handleUpdateShift = (updatedShift) => {
-    setShifts(shifts.map(s => s.id === updatedShift.id ? updatedShift : s));
+    // Ensure the employeeName field is preserved
+    const shiftWithName = {
+      ...updatedShift,
+      employeeName: updatedShift.employeeName || employees.find(e => e.id === updatedShift.employeeId)?.name
+    };
+    
+    setShifts(shifts.map(s => s.id === updatedShift.id ? shiftWithName : s));
     setNotification({ type: 'success', message: 'Shift updated successfully' });
   };
 
@@ -158,7 +175,7 @@ const Shifts = ({ user }) => {
   };
 
   const getEligibleEmployees = (role) => {
-    return employees.filter(emp => emp.skills.includes(role));
+    return employees.filter(emp => (emp.departments || emp.skills || []).includes(role));
   };
 
   const getEmployeeById = (id) => {
@@ -250,7 +267,7 @@ const Shifts = ({ user }) => {
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Employee</option>
-                  {employees.map(emp => (
+                  {getEligibleEmployees(shiftForm.role).map(emp => (
                     <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
                   ))}
                 </select>
@@ -291,13 +308,17 @@ const Shifts = ({ user }) => {
                 <label className="block text-sm font-medium text-gray-700">Role</label>
                 <select
                   value={shiftForm.role}
-                  onChange={(e) => setShiftForm({ ...shiftForm, role: e.target.value })}
+                  onChange={(e) => setShiftForm({ ...shiftForm, role: e.target.value, employeeId: '' })}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="cashier">Cashier</option>
                   <option value="barista">Barista</option>
                   <option value="kitchen">Kitchen</option>
-                  <option value="manager">Manager</option>
+                  <option value="cleaning">Cleaning</option>
+                  <option value="food-prep">Food Prep</option>
+                  <option value="coffee-making">Coffee Making</option>
+                  <option value="baking">Baking</option>
+                  <option value="management">Management</option>
                 </select>
               </div>
 

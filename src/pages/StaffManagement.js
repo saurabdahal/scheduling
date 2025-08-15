@@ -1,24 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import UserDrawer from '../components/UserDrawer';
+import { useNavigate } from 'react-router-dom';
 import NotificationBanner from '../components/NotificationBanner';
 
-const StaffManagement = ({ user }) => {
+const StaffManagement = ({ user, employees, onAddEmployee, onUpdateEmployee, onDeleteEmployee }) => {
+  const navigate = useNavigate();
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
   
-  const [employees, setEmployees] = useState([
-    { id: 1, name: 'Alice Johnson', hourlyRate: 18.50, role: 'Manager', email: 'alice.johnson@company.com', phone: '(555) 123-4567', status: 'active', skills: ['barista', 'cashier'], availability: defaultAvailability() },
-    { id: 2, name: 'Bob Smith', hourlyRate: 15.00, role: 'Employee', email: 'bob.smith@company.com', phone: '(555) 234-5678', status: 'active', skills: ['cashier', 'cleaning'], availability: defaultAvailability() },
-    { id: 3, name: 'Carol Davis', hourlyRate: 16.00, role: 'Employee', email: 'carol.davis@company.com', phone: '(555) 345-6789', status: 'active', skills: ['kitchen', 'food-prep'], availability: defaultAvailability() },
-    { id: 4, name: 'David Wilson', hourlyRate: 15.50, role: 'Employee', email: 'david.wilson@company.com', phone: '(555) 456-7890', status: 'active', skills: ['barista', 'coffee-making'], availability: defaultAvailability() },
-    { id: 5, name: 'Emma Brown', hourlyRate: 14.50, role: 'Employee', email: 'emma.brown@company.com', phone: '(555) 567-8901', status: 'active', skills: ['cashier'], availability: defaultAvailability() }
-  ]);
-
-  const [showDrawer, setShowDrawer] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterDepartment, setFilterDepartment] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [notification, setNotification] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
 
   // Check access after all hooks are declared
   if (!isAdminOrManager) {
@@ -35,32 +29,16 @@ const StaffManagement = ({ user }) => {
     );
   }
 
-  const handleAddEmployee = (employeeData) => {
-    const newEmployee = {
-      ...employeeData,
-      id: Date.now(),
-      hireDate: new Date().toISOString().split('T')[0],
-      status: 'active'
-    };
-    setEmployees([...employees, newEmployee]);
-    setNotification({ type: 'success', message: 'Employee added successfully' });
-  };
-
-  const handleUpdateEmployee = (employeeId, employeeData) => {
-    setEmployees(employees.map(emp => 
-      emp.id === employeeId ? { ...emp, ...employeeData } : emp
-    ));
-    setNotification({ type: 'success', message: 'Employee updated successfully' });
-  };
-
   const handleDeleteEmployee = (employeeId) => {
-    setEmployees(employees.filter(emp => emp.id !== employeeId));
+    onDeleteEmployee(employeeId);
+    setShowDeleteConfirm(false);
+    setEmployeeToDelete(null);
     setNotification({ type: 'success', message: 'Employee deleted successfully' });
   };
 
-  const handleEditEmployee = (employee) => {
-    setSelectedEmployee(employee);
-    setShowDrawer(true);
+  const confirmDelete = (employee) => {
+    setEmployeeToDelete(employee);
+    setShowDeleteConfirm(true);
   };
 
   const getRoleColor = (role) => {
@@ -77,21 +55,34 @@ const StaffManagement = ({ user }) => {
     const colors = {
       'active': 'bg-green-100 text-green-800',
       'inactive': 'bg-gray-100 text-gray-800',
-      'on-leave': 'bg-yellow-100 text-yellow-800'
+      'on-leave': 'bg-yellow-100 text-yellow-800',
+      'available': 'bg-green-100 text-green-800',
+      'unavailable': 'bg-red-100 text-red-800'
     };
     return colors[status] || colors.active;
+  };
+
+  const getStatusDisplay = (status) => {
+    const statusMap = {
+      'active': 'Available',
+      'inactive': 'Unavailable',
+      'on-leave': 'On Leave'
+    };
+    return statusMap[status] || status;
   };
 
   const filteredEmployees = employees.filter(emp => {
     const matchesRole = filterRole === 'all' || emp.role === filterRole;
     const matchesStatus = filterStatus === 'all' || emp.status === filterStatus;
+    const matchesDepartment = filterDepartment === 'all' || emp.departments?.some(dept => dept === filterDepartment);
     const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          emp.email.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesRole && matchesStatus && matchesSearch;
+    return matchesRole && matchesStatus && matchesDepartment && matchesSearch;
   });
 
   const getTotalHours = (availability) => {
-    return Object.values(availability).reduce((total, day) => {
+    // Calculate realistic weekly hours based on availability
+    const totalHours = Object.values(availability).reduce((total, day) => {
       if (day.available) {
         const start = parseInt(day.startTime.split(':')[0]);
         const end = parseInt(day.endTime.split(':')[0]);
@@ -99,19 +90,15 @@ const StaffManagement = ({ user }) => {
       }
       return total;
     }, 0);
+    
+    // Return realistic hours (most employees work 35-40 hours per week)
+    return Math.min(totalHours, 40);
   };
 
-  function defaultAvailability() {
-    return {
-      monday: { available: true, startTime: '09:00', endTime: '17:00' },
-      tuesday: { available: true, startTime: '09:00', endTime: '17:00' },
-      wednesday: { available: true, startTime: '09:00', endTime: '17:00' },
-      thursday: { available: true, startTime: '09:00', endTime: '17:00' },
-      friday: { available: true, startTime: '09:00', endTime: '17:00' },
-      saturday: { available: false, startTime: '09:00', endTime: '17:00' },
-      sunday: { available: false, startTime: '09:00', endTime: '17:00' }
-    };
-  }
+  const availableDepartments = [
+    'cashier', 'barista', 'kitchen', 'cleaning', 'customer-service',
+    'inventory', 'food-prep', 'coffee-making', 'baking', 'management'
+  ];
 
   return (
     <div className="p-6 space-y-6">
@@ -122,7 +109,7 @@ const StaffManagement = ({ user }) => {
           <p className="text-gray-600">Manage employees, roles, and availability</p>
         </div>
         <button
-          onClick={() => { setSelectedEmployee(null); setShowDrawer(true); }}
+          onClick={() => navigate('/employee')}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,7 +120,7 @@ const StaffManagement = ({ user }) => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -156,7 +143,7 @@ const StaffManagement = ({ user }) => {
               </svg>
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Active</p>
+              <p className="text-sm font-medium text-gray-600">Available</p>
               <p className="text-2xl font-semibold text-gray-900">
                 {employees.filter(emp => emp.status === 'active').length}
               </p>
@@ -179,27 +166,11 @@ const StaffManagement = ({ user }) => {
             </div>
           </div>
         </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-orange-100 rounded-lg">
-              <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Avg. Rate</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                ${(employees.reduce((sum, emp) => sum + emp.hourlyRate, 0) / employees.length).toFixed(2)}
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
             <input
@@ -232,9 +203,22 @@ const StaffManagement = ({ user }) => {
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="active">Available</option>
+              <option value="inactive">Unavailable</option>
               <option value="on-leave">On Leave</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Departments</option>
+              {availableDepartments.map(dept => (
+                <option key={dept} value={dept}>{dept.charAt(0).toUpperCase() + dept.slice(1)}</option>
+              ))}
             </select>
           </div>
           <div className="flex items-end">
@@ -243,6 +227,7 @@ const StaffManagement = ({ user }) => {
                 setSearchTerm('');
                 setFilterRole('all');
                 setFilterStatus('all');
+                setFilterDepartment('all');
               }}
               className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
             >
@@ -263,8 +248,9 @@ const StaffManagement = ({ user }) => {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role & Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skills</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Departments</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate & Hours</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -292,20 +278,20 @@ const StaffManagement = ({ user }) => {
                     <div className="text-sm text-gray-500">{employee.phone}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex flex-col space-y-1">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(employee.role)}`}>
-                        {employee.role}
-                      </span>
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(employee.status)}`}>
-                        {employee.status}
-                      </span>
-                    </div>
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(employee.role)}`}>
+                      {employee.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(employee.status)}`}>
+                      {getStatusDisplay(employee.status)}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
-                      {employee.skills.map(skill => (
-                        <span key={skill} className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                          {skill}
+                      {(employee.departments || employee.skills || []).map(dept => (
+                        <span key={dept} className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                          {dept}
                         </span>
                       ))}
                     </div>
@@ -317,13 +303,19 @@ const StaffManagement = ({ user }) => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => handleEditEmployee(employee)}
+                        onClick={() => navigate(`/employee/${employee.id}`)}
                         className="text-blue-600 hover:text-blue-900"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => navigate(`/employee/${employee.id}`)}
+                        className="text-green-600 hover:text-green-900"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDeleteEmployee(employee.id)}
+                        onClick={() => confirmDelete(employee)}
                         className="text-red-600 hover:text-red-900"
                       >
                         Delete
@@ -337,16 +329,36 @@ const StaffManagement = ({ user }) => {
         </div>
       </div>
 
-      {/* User Drawer */}
-      <UserDrawer
-        employees={employees}
-        onAddEmployee={handleAddEmployee}
-        onUpdateEmployee={handleUpdateEmployee}
-        onDeleteEmployee={handleDeleteEmployee}
-        isOpen={showDrawer}
-        onClose={() => setShowDrawer(false)}
-        selectedEmployee={selectedEmployee}
-      />
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <svg className="w-8 h-8 text-red-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <h3 className="text-lg font-medium text-gray-900">Delete Employee</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete {employeeToDelete?.name}? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteEmployee(employeeToDelete.id)}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notification */}
       {notification && (
