@@ -1,13 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-const TopBar = ({ onLogout, user }) => {
+const TopBar = ({ onLogout, user, notifications = [] }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [userDropdown, setUserDropdown] = useState(false);
+  const [notificationDropdown, setNotificationDropdown] = useState(false);
   const location = useLocation();
   const dropdownRef = useRef();
+  const notificationRef = useRef();
   
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
+  
+  // Filter notifications based on user role and ID
+  const visibleNotifications = notifications.filter(notification => {
+    if (notification.recipientRole && notification.recipientRole !== user?.role) {
+      return false;
+    }
+    if (notification.userId && notification.userId !== user?.id) {
+      return false;
+    }
+    return !notification.isRead;
+  });
   
   const menuItems = [
     { to: '/dashboard', label: 'Dashboard' },
@@ -50,6 +63,43 @@ const TopBar = ({ onLogout, user }) => {
               {item.label}
             </Link>
           ))}
+        </div>
+
+        {/* Notifications */}
+        <div className="relative flex items-center gap-2" ref={notificationRef}>
+          <button
+            onClick={() => setNotificationDropdown(v => !v)}
+            className="relative flex items-center gap-2 px-3 py-2 rounded-md bg-blue-700 hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-white"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM10 17h5l-5 5v-5zM5 17h5l-5 5v-5zM15 12h5l-5 5v-5zM10 12h5l-5 5v-5zM5 12h5l-5 5v-5zM15 7h5l-5 5v-5zM10 7h5l-5 5v-5zM5 7h5l-5 5v-5z" />
+            </svg>
+            {visibleNotifications.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {visibleNotifications.length}
+              </span>
+            )}
+          </button>
+          {notificationDropdown && (
+            <div className="absolute right-0 mt-2 w-80 bg-white text-gray-800 rounded shadow-lg z-50 animate-fade-in" style={{ minWidth: '320px', top: '100%' }}>
+              <div className="px-4 py-2 border-b text-sm font-semibold">Notifications</div>
+              {visibleNotifications.length === 0 ? (
+                <div className="px-4 py-3 text-sm text-gray-500">No new notifications</div>
+              ) : (
+                <div className="max-h-64 overflow-y-auto">
+                  {visibleNotifications.slice(0, 5).map(notification => (
+                    <div key={notification.id} className="px-4 py-3 border-b hover:bg-gray-50">
+                      <div className="text-sm font-medium">{notification.title}</div>
+                      <div className="text-xs text-gray-600">{notification.message}</div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {new Date(notification.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* User Dropdown */}

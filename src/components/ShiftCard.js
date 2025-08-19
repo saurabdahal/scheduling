@@ -1,5 +1,6 @@
 import React from 'react';
 import { format, parseISO } from 'date-fns';
+import { Shift } from '../models/index.js';
 
 const ShiftCard = ({ 
   shift, 
@@ -22,6 +23,11 @@ const ShiftCard = ({
   };
 
   const getStatusColor = (status) => {
+    // Use the Shift model's status color method if available
+    if (shift && typeof shift.getStatusColor === 'function') {
+      return shift.getStatusColor();
+    }
+    
     const colors = {
       'scheduled': 'bg-blue-100 text-blue-800',
       'in-progress': 'bg-yellow-100 text-yellow-800',
@@ -41,6 +47,11 @@ const ShiftCard = ({
   };
 
   const getShiftDuration = () => {
+    // Use the Shift model's duration method if available
+    if (shift && typeof shift.getDuration === 'function') {
+      return `${shift.getDuration().toFixed(1)}h`;
+    }
+    
     const start = parseISO(`2000-01-01T${shift.startTime}`);
     const end = parseISO(`2000-01-01T${shift.endTime}`);
     const diffMs = end - start;

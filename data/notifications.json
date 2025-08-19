@@ -1,0 +1,21 @@
+[
+  {
+    "id": null,
+    "type": "time_off_response",
+    "title": "Time Off Request rejected",
+    "message": "Your time off request has been rejected",
+    "userId": 1755637847213,
+    "recipientRole": null,
+    "isRead": false,
+    "isDismissed": false,
+    "priority": "medium",
+    "category": "general",
+    "actionUrl": null,
+    "actionText": null,
+    "createdAt": "2025-08-19T21:19:26.454Z",
+    "readAt": null,
+    "dismissedAt": null,
+    "expiresAt": null,
+    "metadata": {}
+  }
+]

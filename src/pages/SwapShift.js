@@ -1,94 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { format, parseISO, addDays } from 'date-fns';
 import NotificationBanner from '../components/NotificationBanner';
+import { Shift, SwapRequest, TimeOffRequest, User, Notification } from '../models/index.js';
 
-const SwapShift = ({ user, employees = [] }) => {
+const SwapShift = ({ 
+  user, 
+  employees = [], 
+  shifts = [],
+  swapRequests = [],
+  timeOffRequests = [],
+  onAddSwapRequest,
+  onAddTimeOffRequest,
+  onUpdateSwapRequestStatus,
+  onUpdateTimeOffRequestStatus
+}) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
-  const [shifts, setShifts] = useState([
-    {
-      id: 1,
-      employeeId: 1,
-      employeeName: 'Alice Johnson',
-      date: '2025-08-18',
-      startTime: '09:00',
-      endTime: '17:00',
-      role: 'barista',
-      status: 'scheduled'
-    },
-    {
-      id: 2,
-      employeeId: 2,
-      employeeName: 'Bob Smith',
-      date: '2025-08-19',
-      startTime: '09:00',
-      endTime: '17:00',
-      role: 'cashier',
-      status: 'scheduled'
-    },
-    {
-      id: 3,
-      employeeId: 3,
-      employeeName: 'Carol Davis',
-      date: '2025-08-20',
-      startTime: '09:00',
-      endTime: '17:00',
-      role: 'kitchen',
-      status: 'scheduled'
-    }
-  ]);
-
-  const [swapRequests, setSwapRequests] = useState([
-    {
-      id: 1,
-      requesterId: 1,
-      requesterName: 'Alice Johnson',
-      shiftId: 1,
-      shiftDate: '2025-08-18',
-      shiftTime: '09:00-17:00',
-      reason: 'Doctor appointment',
-      status: 'pending',
-      createdAt: '2025-08-15T10:00:00Z'
-    },
-    {
-      id: 2,
-      requesterId: 2,
-      requesterName: 'Bob Smith',
-      shiftId: 2,
-      shiftDate: '2025-08-19',
-      shiftTime: '09:00-17:00',
-      reason: 'Family emergency',
-      status: 'approved',
-      createdAt: '2025-08-14T14:30:00Z'
-    }
-  ]);
-
-  const [timeOffRequests, setTimeOffRequests] = useState([
-    {
-      id: 1,
-      employeeId: 1,
-      employeeName: 'Alice Johnson',
-      startDate: '2025-08-25',
-      endDate: '2025-08-27',
-      reason: 'Vacation',
-      status: 'pending',
-      createdAt: '2025-08-13T09:00:00Z'
-    },
-    {
-      id: 2,
-      employeeId: 3,
-      employeeName: 'Carol Davis',
-      startDate: '2025-08-30',
-      endDate: '2025-08-30',
-      reason: 'Personal day',
-      status: 'approved',
-      createdAt: '2025-08-12T16:00:00Z'
-    }
-  ]);
 
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showTimeOffModal, setShowTimeOffModal] = useState(false);
   const [selectedShift, setSelectedShift] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [employeeSearch, setEmployeeSearch] = useState('');
 
   const [swapForm, setSwapForm] = useState({
     shiftId: '',
@@ -111,78 +43,101 @@ const SwapShift = ({ user, employees = [] }) => {
     return colors[status] || colors.pending;
   };
 
-  const handleSwapRequest = () => {
+  const handleSwapRequest = async () => {
     if (!swapForm.shiftId || !swapForm.reason) {
       setNotification({ type: 'error', message: 'Please fill in all required fields' });
       return;
     }
 
     const shift = shifts.find(s => s.id === parseInt(swapForm.shiftId));
-    const newRequest = {
+    
+    // Create swap request using the model
+    const newRequest = new SwapRequest({
       id: Date.now(),
-      requesterId: 1, // Current user ID
-      requesterName: 'Alice Johnson', // Current user name
+      requesterId: user.id || 1,
+      requesterName: user.name || employees.find(e => e.id === user.id)?.name || 'Unknown',
       shiftId: parseInt(swapForm.shiftId),
       shiftDate: shift.date,
       shiftTime: `${shift.startTime}-${shift.endTime}`,
       reason: swapForm.reason,
       status: 'pending',
       createdAt: new Date().toISOString()
-    };
+    });
 
-    setSwapRequests([...swapRequests, newRequest]);
-    setShowSwapModal(false);
-    setSwapForm({ shiftId: '', reason: '', preferredSwapWith: '' });
-    setNotification({ type: 'success', message: 'Swap request submitted successfully' });
+    // Validate the request
+    if (!newRequest.isValid()) {
+      setNotification({ type: 'error', message: 'Invalid swap request data' });
+      return;
+    }
+
+    try {
+      await onAddSwapRequest(newRequest);
+      setShowSwapModal(false);
+      setSwapForm({ shiftId: '', reason: '', preferredSwapWith: '' });
+      setNotification({ type: 'success', message: 'Swap request submitted successfully' });
+    } catch (error) {
+      setNotification({ type: 'error', message: 'Failed to submit swap request' });
+    }
   };
 
-  const handleTimeOffRequest = () => {
+  const handleTimeOffRequest = async () => {
     if (!timeOffForm.startDate || !timeOffForm.endDate || !timeOffForm.reason) {
       setNotification({ type: 'error', message: 'Please fill in all required fields' });
       return;
     }
 
-    const newRequest = {
+    // Create time off request using the model
+    const newRequest = new TimeOffRequest({
       id: Date.now(),
-      employeeId: 1, // Current user ID
-      employeeName: 'Alice Johnson', // Current user name
+      employeeId: user.id || 1,
+      employeeName: user.name || employees.find(e => e.id === user.id)?.name || 'Unknown',
       startDate: timeOffForm.startDate,
       endDate: timeOffForm.endDate,
       reason: timeOffForm.reason,
       status: 'pending',
       createdAt: new Date().toISOString()
-    };
+    });
 
-    setTimeOffRequests([...timeOffRequests, newRequest]);
-    setShowTimeOffModal(false);
-    setTimeOffForm({ startDate: '', endDate: '', reason: '' });
-    setNotification({ type: 'success', message: 'Time-off request submitted successfully' });
+    // Validate the request
+    if (!newRequest.isValid()) {
+      setNotification({ type: 'error', message: 'Invalid time off request data' });
+      return;
+    }
+
+    try {
+      await onAddTimeOffRequest(newRequest);
+      setShowTimeOffModal(false);
+      setTimeOffForm({ startDate: '', endDate: '', reason: '' });
+      setNotification({ type: 'success', message: 'Time-off request submitted successfully' });
+    } catch (error) {
+      setNotification({ type: 'error', message: 'Failed to submit time off request' });
+    }
   };
 
-  const handleApproveRequest = (requestId, type) => {
-    if (type === 'swap') {
-      setSwapRequests(swapRequests.map(req => 
-        req.id === requestId ? { ...req, status: 'approved' } : req
-      ));
-    } else {
-      setTimeOffRequests(timeOffRequests.map(req => 
-        req.id === requestId ? { ...req, status: 'approved' } : req
-      ));
+  const handleApproveRequest = async (requestId, type) => {
+    try {
+      if (type === 'swap') {
+        await onUpdateSwapRequestStatus(requestId, 'approved', user.id || 'manager');
+      } else {
+        await onUpdateTimeOffRequestStatus(requestId, 'approved', user.id || 'manager');
+      }
+      setNotification({ type: 'success', message: 'Request approved' });
+    } catch (error) {
+      setNotification({ type: 'error', message: 'Failed to approve request' });
     }
-    setNotification({ type: 'success', message: 'Request approved' });
   };
 
-  const handleRejectRequest = (requestId, type) => {
-    if (type === 'swap') {
-      setSwapRequests(swapRequests.map(req => 
-        req.id === requestId ? { ...req, status: 'rejected' } : req
-      ));
-    } else {
-      setTimeOffRequests(timeOffRequests.map(req => 
-        req.id === requestId ? { ...req, status: 'rejected' } : req
-      ));
+  const handleRejectRequest = async (requestId, type) => {
+    try {
+      if (type === 'swap') {
+        await onUpdateSwapRequestStatus(requestId, 'rejected', user.id || 'manager');
+      } else {
+        await onUpdateTimeOffRequestStatus(requestId, 'rejected', user.id || 'manager');
+      }
+      setNotification({ type: 'success', message: 'Request rejected' });
+    } catch (error) {
+      setNotification({ type: 'error', message: 'Failed to reject request' });
     }
-    setNotification({ type: 'success', message: 'Request rejected' });
   };
 
   const getUpcomingShifts = () => {
@@ -194,7 +149,13 @@ const SwapShift = ({ user, employees = [] }) => {
 
   const upcomingShifts = getUpcomingShifts();
 
-  // Filtered data for user or all for admin/manager
+  const filteredEmployees = employees.filter(emp => {
+    if (!employeeSearch) return true;
+    const q = employeeSearch.toLowerCase();
+    return emp.name.toLowerCase().includes(q) || (emp.email || '').toLowerCase().includes(q);
+  });
+
+  // Role-based data filtering
   const visibleSwapRequests = isAdminOrManager
     ? swapRequests
     : swapRequests.filter(req => req.requesterId === user.id);
@@ -469,6 +430,26 @@ const SwapShift = ({ user, employees = [] }) => {
                   ))}
                 </select>
               </div>
+
+              {isAdminOrManager && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Filter Employees</label>
+                  <input
+                    type="text"
+                    value={employeeSearch}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                    placeholder="Search employees..."
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="mt-2 max-h-40 overflow-y-auto border rounded">
+                    {filteredEmployees.map(emp => (
+                      <div key={emp.id} className="px-3 py-2 text-sm text-gray-700">
+                        {emp.name} {emp.email && <span className="text-gray-500">• {emp.email}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">Reason</label>

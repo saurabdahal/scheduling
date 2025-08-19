@@ -1,0 +1,87 @@
+[
+  {
+    "id": 1,
+    "username": "admin",
+    "password": "admin123",
+    "role": "Admin",
+    "email": "admin@company.com",
+    "firstName": "",
+    "lastName": "",
+    "isActive": true,
+    "createdAt": "2025-08-16T00:39:32.278Z",
+    "lastLogin": null,
+    "permissions": [
+      "all"
+    ]
+  },
+  {
+    "id": 2,
+    "username": "manager",
+    "password": "manager123",
+    "role": "Manager",
+    "email": "manager@company.com",
+    "firstName": "",
+    "lastName": "",
+    "isActive": true,
+    "createdAt": "2025-08-16T00:39:32.279Z",
+    "lastLogin": null,
+    "permissions": [
+      "manage_employees",
+      "manage_shifts",
+      "view_reports"
+    ]
+  },
+  {
+    "id": 3,
+    "username": "bob",
+    "password": "bob123",
+    "role": "Employee",
+    "email": "bob@company.com",
+    "firstName": "",
+    "lastName": "",
+    "isActive": true,
+    "createdAt": "2025-08-16T00:39:32.279Z",
+    "lastLogin": null,
+    "permissions": [
+      "view_own_shifts",
+      "request_time_off"
+    ]
+  },
+  {
+    "id": 1755632361470,
+    "username": "david.wilson@company.com",
+    "password": "sswilson678",
+    "role": "Employee",
+    "email": "david.wilson@company.com",
+    "firstName": "",
+    "lastName": "",
+    "isActive": true,
+    "createdAt": "2025-08-19T19:39:21.469Z",
+    "lastLogin": null,
+    "permissions": []
+  },
+  {
+    "id": 1755636660294,
+    "username": "cheick.maa@cambriancollege.ca",
+    "password": "cheick701",
+    "role": "Employee",
+    "email": "cheick.maa@cambriancollege.ca",
+    "firstName": "",
+    "lastName": "",
+    "isActive": true,
+    "createdAt": "2025-08-19T20:51:00.293Z",
+    "lastLogin": null,
+    "permissions": []
+  },
+  {
+    "id": 1755637847213,
+    "username": "saurab.test@cambriancollege.ca",
+    "password": "saurab378",
+    "role": "Employee",
+    "email": "saurab.test@cambriancollege.ca",
+    "isActive": true,
+    "createdAt": "2025-08-19T21:10:47.212Z",
+    "lastLogin": null,
+    "permissions": []
+  }
+]

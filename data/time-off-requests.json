@@ -1,0 +1,36 @@
+[
+  {
+    "id": 1755638218293,
+    "employeeId": 1755637847213,
+    "employeeName": "Unknown",
+    "startDate": "2025-08-25",
+    "endDate": "2025-08-25",
+    "reason": "est",
+    "type": "vacation",
+    "status": "rejected",
+    "createdAt": "2025-08-19T21:16:58.293Z",
+    "updatedAt": "2025-08-19T21:19:26.431Z",
+    "reviewedBy": 1,
+    "reviewedAt": "2025-08-19T21:19:26.431Z",
+    "reviewNotes": "Rejected by manager",
+    "emergency": false,
+    "documentation": null
+  },
+  {
+    "id": 1755638292764,
+    "employeeId": 1755637847213,
+    "employeeName": "Unknown",
+    "startDate": "2025-08-25",
+    "endDate": "2025-08-25",
+    "reason": "Chill",
+    "type": "vacation",
+    "status": "approved",
+    "createdAt": "2025-08-19T21:18:12.764Z",
+    "updatedAt": "2025-08-19T21:18:22.596Z",
+    "reviewedBy": 1,
+    "reviewedAt": "2025-08-19T21:18:22.596Z",
+    "reviewNotes": "Approved by manager",
+    "emergency": false,
+    "documentation": null
+  }
+]

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import NotificationBanner from '../components/NotificationBanner';
+import { Employee, User, Department } from '../models/index.js';
 
 const EmployeePage = ({ user, employees, onAddEmployee, onUpdateEmployee, onDeleteEmployee }) => {
   const navigate = useNavigate();
@@ -33,21 +34,10 @@ const EmployeePage = ({ user, employees, onAddEmployee, onUpdateEmployee, onDele
 
   // Hierarchy roles - managers can't add higher than their level
   const getAvailableRoles = () => {
-    const userRole = user?.role;
-    if (userRole === 'Admin') {
-      return ['Employee', 'Supervisor', 'Manager', 'Admin'];
-    } else if (userRole === 'Manager') {
-      return ['Employee', 'Supervisor'];
-    } else if (userRole === 'Supervisor') {
-      return ['Employee'];
-    }
-    return ['Employee'];
+    return User.getAvailableRoles(user?.role);
   };
 
-  const availableDepartments = [
-    'cashier', 'barista', 'kitchen', 'cleaning', 'customer-service',
-    'inventory', 'food-prep', 'coffee-making', 'baking', 'management'
-  ];
+  const availableDepartments = Employee.getAvailableDepartments();
 
   useEffect(() => {
     if (selectedEmployee) {
@@ -68,11 +58,20 @@ const EmployeePage = ({ user, employees, onAddEmployee, onUpdateEmployee, onDele
   const handleSubmit = (e) => {
     e.preventDefault();
     
+    // Create employee model for validation
+    const employeeData = { ...formData, id: isEditMode ? parseInt(id) : Date.now() };
+    const employee = new Employee(employeeData);
+    
+    if (!employee.isValid()) {
+      setNotification({ type: 'error', message: 'Please fill in all required fields' });
+      return;
+    }
+    
     if (isEditMode) {
       onUpdateEmployee(parseInt(id), formData);
       setNotification({ type: 'success', message: 'Employee updated successfully' });
     } else {
-      onAddEmployee({ ...formData, id: Date.now() });
+      onAddEmployee(formData);
       setNotification({ type: 'success', message: 'Employee added successfully' });
       navigate('/staff');
     }

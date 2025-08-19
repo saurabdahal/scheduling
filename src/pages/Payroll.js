@@ -2,80 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { format, startOfWeek, endOfWeek, parseISO, addWeeks, subWeeks, startOfMonth, endOfMonth, addDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Shift, PayrollRecord, User, Notification } from '../models/index.js';
+import dataService from '../services/DataService.js';
 
-const Payroll = ({ user }) => {
+const Payroll = ({ user, employees = [], shifts = [], payrollRecords = [], onUpdatePayrollRecords }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
-  
-  const demoEmployees = [
-    { id: 1, name: 'Alice Johnson', hourlyRate: 18.50, role: 'Manager', email: 'alice.johnson@company.com', phone: '(555) 123-4567' },
-    { id: 2, name: 'Bob Smith', hourlyRate: 15.00, role: 'Employee', email: 'bob.smith@company.com', phone: '(555) 234-5678' },
-    { id: 3, name: 'Carol Davis', hourlyRate: 16.00, role: 'Employee', email: 'carol.davis@company.com', phone: '(555) 345-6789' },
-    { id: 4, name: 'David Wilson', hourlyRate: 15.50, role: 'Employee', email: 'david.wilson@company.com', phone: '(555) 456-7890' },
-    { id: 5, name: 'Emma Brown', hourlyRate: 14.50, role: 'Employee', email: 'emma.brown@company.com', phone: '(555) 567-8901' }
-  ];
-  // Always generate demo shifts for all employees
-  function generateDemoShifts() {
-    const shifts = [];
-    let shiftId = 1;
-    
-    // Generate shifts for the current week and a few weeks around it
-    const today = new Date();
-    const currentWeekStart = startOfWeek(today, { weekStartsOn: 1 });
-    
-    // Generate shifts for current week and 2 weeks before/after
-    for (let weekOffset = -2; weekOffset <= 2; weekOffset++) {
-      const weekStart = addWeeks(currentWeekStart, weekOffset);
-      
-      // Generate shifts for each day of the week (Monday to Friday)
-      for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
-        const dateObj = addDays(weekStart, dayOffset);
-        
-        demoEmployees.forEach(emp => {
-          // Standard 8-hour shift: 9 AM - 5 PM
-          const startHour = 9;
-          const endHour = 17;
-          
-          // Add some realistic variation in actual start/end times
-          const actualStartHour = startHour + (Math.random() * 0.5 - 0.25); // ±15 minutes
-          const actualEndHour = endHour + (Math.random() * 0.5 - 0.25); // ±15 minutes
-          
-          // Determine status based on date
-          let status = 'scheduled';
-          if (dateObj < today) {
-            status = 'completed';
-          } else if (dateObj.toDateString() === today.toDateString()) {
-            status = 'in-progress';
-          }
-          
-          shifts.push({
-            id: shiftId++,
-            employeeId: emp.id,
-            employeeName: emp.name,
-            date: format(dateObj, 'yyyy-MM-dd'),
-            startTime: `${startHour.toString().padStart(2, '0')}:00`,
-            endTime: `${endHour.toString().padStart(2, '0')}:00`,
-            actualStartTime: `${Math.floor(actualStartHour).toString().padStart(2, '0')}:${Math.floor((actualStartHour % 1) * 60).toString().padStart(2, '0')}`,
-            actualEndTime: `${Math.floor(actualEndHour).toString().padStart(2, '0')}:${Math.floor((actualEndHour % 1) * 60).toString().padStart(2, '0')}`,
-            status,
-            hourlyRate: emp.hourlyRate
-          });
-        });
-      }
-    }
-    
-    return shifts;
-  }
-  // Always use all demo shifts
-  const [shifts] = useState(generateDemoShifts());
-  // For employees, only show their own info in the UI, but use all demo shifts for calculations
-  const employees = isAdminOrManager ? demoEmployees : demoEmployees.filter(e => e.id === user.id);
+  // Employees and shifts now come from props (App state)
 
   const [selectedEmployees, setSelectedEmployees] = useState(() => {
-    // Default to all employees for admin/manager, or current user for employees
     if (isAdminOrManager) {
-      return demoEmployees.map(emp => emp.id);
+      return employees.map(emp => emp.id);
     } else {
-      return [user.id];
+      return user?.id ? [user.id] : [];
     }
   });
   const [payrollPeriod, setPayrollPeriod] = useState('week');
@@ -90,7 +28,7 @@ const Payroll = ({ user }) => {
 
   // Debug: Log shifts when component mounts
   useEffect(() => {
-    console.log('Generated shifts:', shifts);
+    console.log('Loaded shifts:', shifts);
     console.log('Current date range:', getDateRange());
     console.log('Selected employees:', selectedEmployees);
     
@@ -163,29 +101,33 @@ const Payroll = ({ user }) => {
         parseISO(shift.date) <= parseISO(dateRange.endDate) &&
         shift.status === 'completed'
       );
-      const totalHours = employeeShifts.reduce((total, shift) => {
-        const hours = calculateHours(shift.actualStartTime || shift.startTime, shift.actualEndTime || shift.endTime);
-        return total + (isNaN(hours) ? 0 : hours);
-      }, 0);
-      const regularHours = Math.min(totalHours, 40);
-      const overtimeHours = Math.max(0, totalHours - 40);
-      const overtimeRate = employee.hourlyRate * 1.5;
-      const regularPay = regularHours * employee.hourlyRate;
-      const overtimePay = overtimeHours * overtimeRate;
-      const totalPay = regularPay + overtimePay;
+      
+      // Create payroll record using the model
+      const payrollRecord = new PayrollRecord({
+        employeeId: employee.id,
+        employeeName: employee.name,
+        payPeriodStart: dateRange.startDate,
+        payPeriodEnd: dateRange.endDate,
+        hourlyRate: employee.hourlyRate,
+        shifts: employeeShifts
+      });
+      
+      // Calculate payroll from shifts using model method
+      payrollRecord.calculateFromShifts(employeeShifts);
+      
       return {
         employeeId: employee.id,
         employeeName: employee.name,
         hourlyRate: employee.hourlyRate,
-        totalHours: isNaN(totalHours) ? 0 : totalHours,
-        regularHours: isNaN(regularHours) ? 0 : regularHours,
-        overtimeHours: isNaN(overtimeHours) ? 0 : overtimeHours,
-        regularPay: isNaN(regularPay) ? 0 : regularPay,
-        overtimePay: isNaN(overtimePay) ? 0 : overtimePay,
-        totalPay: isNaN(totalPay) ? 0 : totalPay,
+        totalHours: payrollRecord.totalHours,
+        regularHours: payrollRecord.regularHours,
+        overtimeHours: payrollRecord.overtimeHours,
+        regularPay: payrollRecord.regularPay,
+        overtimePay: payrollRecord.overtimePay,
+        totalPay: payrollRecord.totalPay,
         shifts: employeeShifts.length,
         dailyData: employeeShifts.map(shift => {
-          const hours = calculateHours(shift.actualStartTime || shift.startTime, shift.actualEndTime || shift.endTime);
+          const hours = shift.getActualDuration() || shift.getDuration();
           return {
             date: shift.date,
             day: format(parseISO(shift.date), 'EEE'),
@@ -201,6 +143,15 @@ const Payroll = ({ user }) => {
     setIsGenerating(false);
     setNoShiftsFound(payroll.every(emp => emp.shifts === 0));
     setNotification({ type: 'success', message: 'Payroll generated successfully' });
+    
+    // Create notification for payroll ready
+    if (payroll.length > 0) {
+      const notification = Notification.createPayrollReady(
+        payroll[0].employeeName,
+        `${dateRange.startDate} to ${dateRange.endDate}`
+      );
+      console.log('Payroll ready notification:', notification.toJSON());
+    }
   };
 
   // Generate PDF

@@ -30,13 +30,15 @@ const ScheduleGrid = ({
   const handleDrop = (e, day, timeSlot) => {
     e.preventDefault();
     if (draggedShift && onShiftUpdate) {
-      const newShift = {
-        ...draggedShift,
+      // Pass the updated properties to the parent component
+      // The parent will handle creating/updating the Shift model instance
+      const updatedProperties = {
+        id: draggedShift.id,
         date: format(day, 'yyyy-MM-dd'),
         startTime: `${timeSlot.toString().padStart(2, '0')}:00`,
         endTime: `${(timeSlot + 2).toString().padStart(2, '0')}:00` // Default 2-hour shift
       };
-      onShiftUpdate(newShift);
+      onShiftUpdate(updatedProperties);
     }
     setDraggedShift(null);
     setDragOverSlot(null);

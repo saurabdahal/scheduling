@@ -2,70 +2,87 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns';
 
-const Dashboard = ({ user }) => {
+const Dashboard = ({ user, employees = [], shifts = [], notifications: appNotifications = [] }) => {
   const navigate = useNavigate();
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
   
   const [analytics, setAnalytics] = useState({
-    totalEmployees: 5,
-    totalShifts: 22,
-    hoursScheduled: 38,
-    hoursWorked: 36,
-    laborCost: 2640,
-    upcomingShifts: 3
+    totalEmployees: 0,
+    totalShifts: 0,
+    hoursScheduled: 0,
+    hoursWorked: 0,
+    laborCost: 0,
+    upcomingShifts: 0
   });
 
-  const [recentShifts, setRecentShifts] = useState([
-    {
-      id: 1,
-      employeeName: 'Bob Smith',
-      role: 'Cashier',
-      date: '2025-08-15',
-      startTime: '09:00',
-      endTime: '17:00',
-      status: 'completed'
-    },
-    {
-      id: 2,
-      employeeName: 'Bob Smith',
-      role: 'Cashier',
-      date: '2025-08-14',
-      startTime: '09:00',
-      endTime: '17:00',
-      status: 'completed'
-    },
-    {
-      id: 3,
-      employeeName: 'Bob Smith',
-      role: 'Cashier',
-      date: '2025-08-13',
-      startTime: '09:00',
-      endTime: '17:00',
-      status: 'completed'
-    },
-    {
-      id: 4,
-      employeeName: 'Bob Smith',
-      role: 'Cashier',
-      date: '2025-08-12',
-      startTime: '09:00',
-      endTime: '17:00',
-      status: 'completed'
-    },
-    {
-      id: 5,
-      employeeName: 'Bob Smith',
-      role: 'Cashier',
-      date: '2025-08-11',
-      startTime: '09:00',
-      endTime: '17:00',
-      status: 'completed'
-    }
-  ]);
+  const [recentShifts, setRecentShifts] = useState([]);
 
-  const [notifications, setNotifications] = useState([
-    { id: 1, type: 'success', message: 'Payment report generated for last week', time: '2 days ago' }
-  ]);
+  const [notifications, setNotifications] = useState([]);
+
+  // Calculate analytics from real data
+  useEffect(() => {
+    if (employees && shifts) {
+      const totalEmployees = employees.length;
+      const totalShifts = shifts.length;
+      
+      // Calculate hours scheduled
+      const hoursScheduled = shifts.reduce((total, shift) => {
+        const start = parseISO(`2000-01-01T${shift.startTime}`);
+        const end = parseISO(`2000-01-01T${shift.endTime}`);
+        const diffMs = end - start;
+        return total + Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+      }, 0);
+      
+      // Calculate hours worked (completed shifts)
+      const hoursWorked = shifts.filter(shift => shift.status === 'completed').reduce((total, shift) => {
+        const start = parseISO(`2000-01-01T${shift.startTime}`);
+        const end = parseISO(`2000-01-01T${shift.endTime}`);
+        const diffMs = end - start;
+        return total + Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+      }, 0);
+      
+      // Calculate labor cost
+      const laborCost = shifts.reduce((total, shift) => {
+        const employee = employees.find(emp => emp.id === shift.employeeId);
+        if (employee) {
+          const start = parseISO(`2000-01-01T${shift.startTime}`);
+          const end = parseISO(`2000-01-01T${shift.endTime}`);
+          const hours = Math.round((end - start) / (1000 * 60 * 60) * 10) / 10;
+          return total + (hours * employee.hourlyRate);
+        }
+        return total;
+      }, 0);
+      
+      // Count upcoming shifts (scheduled for today or future)
+      const today = new Date();
+      const upcomingShifts = shifts.filter(shift => {
+        const shiftDate = new Date(shift.date);
+        return shiftDate >= today && shift.status === 'scheduled';
+      }).length;
+      
+      setAnalytics({
+        totalEmployees,
+        totalShifts,
+        hoursScheduled,
+        hoursWorked,
+        laborCost: Math.round(laborCost),
+        upcomingShifts
+      });
+      
+      // Get recent shifts (last 5 completed shifts)
+      const recent = shifts
+        .filter(shift => shift.status === 'completed')
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 5);
+      
+      setRecentShifts(recent);
+      
+      // Use app notifications if available
+      if (appNotifications.length > 0) {
+        setNotifications(appNotifications.slice(0, 3));
+      }
+    }
+  }, [employees, shifts, appNotifications]);
 
   const getStatusColor = (status) => {
     const colors = {
@@ -171,31 +188,43 @@ const Dashboard = ({ user }) => {
           </div>
           <div className="p-6">
             <div className="space-y-4">
-              {recentShifts.map(shift => (
-                <div key={shift.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-medium text-gray-600">
-                          {shift.employeeName.split(' ').map(n => n[0]).join('')}
+              {recentShifts.length > 0 ? (
+                recentShifts.map(shift => {
+                  const employee = employees.find(emp => emp.id === shift.employeeId);
+                  if (!employee) return null;
+                  
+                  return (
+                    <div key={shift.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium text-gray-600">
+                              {employee.name.split(' ').map(n => n[0]).join('')}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{employee.name}</p>
+                          <p className="text-sm text-gray-500">{shift.role}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-900">
+                          {format(parseISO(shift.date), 'MMM dd')} • {shift.startTime} - {shift.endTime}
+                        </p>
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(shift.status)}`}>
+                          {shift.status}
                         </span>
                       </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{shift.employeeName}</p>
-                      <p className="text-sm text-gray-500">{shift.role}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-900">
-                      {format(parseISO(shift.date), 'MMM dd')} • {shift.startTime} - {shift.endTime}
-                    </p>
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(shift.status)}`}>
-                      {shift.status}
-                    </span>
-                  </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No shifts completed yet</p>
+                  <p className="text-sm">Shifts will appear here once they are completed</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -207,17 +236,24 @@ const Dashboard = ({ user }) => {
           </div>
           <div className="p-6">
             <div className="space-y-4">
-              {notifications.map(notification => (
-                <div key={notification.id} className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    {getNotificationIcon(notification.type)}
+              {notifications.length > 0 ? (
+                notifications.map(notification => (
+                  <div key={notification.id} className="flex items-start space-x-3">
+                    <div className="flex-shrink-0">
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-900">{notification.message}</p>
+                      <p className="text-xs text-gray-500">{notification.time}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">{notification.message}</p>
-                    <p className="text-xs text-gray-500">{notification.time}</p>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No notifications</p>
+                  <p className="text-sm">Notifications will appear here</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
