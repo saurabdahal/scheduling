@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Employee, User } from '../models/index.js';
 
 const UserDrawer = ({ 
   employees = [], 
@@ -59,19 +60,25 @@ const UserDrawer = ({
     }
   }, [selectedEmployee]);
 
-  const availableSkills = [
-    'cashier', 'barista', 'kitchen', 'cleaning', 'customer-service',
-    'inventory', 'food-prep', 'coffee-making', 'baking', 'management'
-  ];
-
-  const availableRoles = ['Employee', 'Manager', 'Supervisor', 'Admin'];
+  const availableSkills = Employee.getAvailableDepartments();
+  const availableRoles = User.getAvailableRoles();
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Create employee model for validation
+    const employeeData = { ...formData, id: selectedEmployee ? selectedEmployee.id : Date.now() };
+    const employee = new Employee(employeeData);
+    
+    if (!employee.isValid()) {
+      console.error('Invalid employee data');
+      return;
+    }
+    
     if (selectedEmployee) {
       onUpdateEmployee(selectedEmployee.id, formData);
     } else {
-      onAddEmployee({ ...formData, id: Date.now() });
+      onAddEmployee(formData);
     }
     handleClose();
   };

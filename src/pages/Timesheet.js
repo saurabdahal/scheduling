@@ -1,23 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { format, startOfWeek, endOfWeek, parseISO, addWeeks, subWeeks } from 'date-fns';
 import ShiftCard from '../components/ShiftCard';
 import NotificationBanner from '../components/NotificationBanner';
 
-const Timesheet = ({ user }) => {
-  const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
-  const demoEmployees = [
-    { id: 1, name: 'Alice Johnson', hourlyRate: 18.50 },
-    { id: 2, name: 'Bob Smith', hourlyRate: 15.00 },
-    { id: 3, name: 'Carol Davis', hourlyRate: 16.00 },
-    { id: 4, name: 'David Wilson', hourlyRate: 15.50 },
-    { id: 5, name: 'Emma Brown', hourlyRate: 14.50 }
-  ];
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [shifts, setShifts] = useState([]);
-  const [employees, setEmployees] = useState(demoEmployees);
+import dataService from '../services/DataService.js';
+import { populateEmployeeNames } from '../models/utils.js';
 
+const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
+  const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
+  const [currentDate, setCurrentDate] = useState(new Date());
+  // Shifts and employees come from props; no local demo state
+
+  // Find the employee record for the logged-in user
+  const currentEmployee = employees.find(emp => emp.email === user.email || emp.userId === user.id);
+  
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(() => {
-    if (!isAdminOrManager && user) return user.id;
+    if (!isAdminOrManager && currentEmployee) return currentEmployee.id.toString();
     return 'all';
   });
   const [selectedStatus, setSelectedStatus] = useState('all');
@@ -27,78 +25,35 @@ const Timesheet = ({ user }) => {
     endDate: format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
   });
   const [notification, setNotification] = useState(null);
+  
+  // Add state for edit and delete confirmation
+  const [editingShift, setEditingShift] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [shiftToDelete, setShiftToDelete] = useState(null);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
 
-  // Generate demo shifts for all employees for the selected week in 2025
-  useEffect(() => {
-    setShifts(generateDemoShiftsForWeek(weekStart, weekEnd));
-  }, [weekStart, weekEnd]);
+  // No demo shift generation; this page only displays shifts it receives
 
-  function generateDemoShiftsForWeek(weekStart, weekEnd) {
-    const shifts = [];
-    let shiftId = 1;
-    let date = new Date(weekStart);
-    const now = new Date();
-    while (date <= weekEnd) {
-      const weekday = date.getDay();
-      if (weekday !== 0) { // skip Sundays
-        demoEmployees.forEach(emp => {
-          let status = 'scheduled';
-          const shiftStart = new Date(date);
-          shiftStart.setHours(9, 0, 0, 0);
-          const shiftEnd = new Date(date);
-          shiftEnd.setHours(17, 0, 0, 0);
-          if (date < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
-            status = 'completed';
-          } else if (
-            date.getFullYear() === now.getFullYear() &&
-            date.getMonth() === now.getMonth() &&
-            date.getDate() === now.getDate()
-          ) {
-            if (now >= shiftStart && now <= shiftEnd) {
-              status = 'in-progress';
-            } else if (now < shiftStart) {
-              status = 'scheduled';
-            } else {
-              status = 'completed';
-            }
-          }
-          shifts.push({
-            id: shiftId++,
-            employeeId: emp.id,
-            employeeName: emp.name,
-            date: date.toISOString().slice(0, 10),
-            startTime: '09:00',
-            endTime: '17:00',
-            role: 'cashier',
-            status,
-            actualStartTime: status === 'completed' ? '09:00' : '',
-            actualEndTime: status === 'completed' ? '17:00' : '',
-            notes: '',
-            hourlyRate: emp.hourlyRate
-          });
-        });
-      }
-      date.setDate(date.getDate() + 1);
-    }
-    return shifts;
-  }
-
+  // Populate employee names for all shifts to fix "Unknown Employee" issue
+  const shiftsWithEmployeeNames = populateEmployeeNames(shifts, employees);
+  
   const filteredShifts = isAdminOrManager
-    ? shifts.filter(shift =>
+    ? shiftsWithEmployeeNames.filter(shift =>
         (selectedEmployeeId === 'all' || shift.employeeId === parseInt(selectedEmployeeId)) &&
         (selectedStatus === 'all' || shift.status === selectedStatus)
       )
-    : shifts.filter(shift =>
-        shift.employeeId === user.id &&
+    : shiftsWithEmployeeNames.filter(shift =>
+        shift.employeeId === currentEmployee?.id &&
         (selectedStatus === 'all' || shift.status === selectedStatus)
       );
 
   const summaryEmployees = isAdminOrManager
     ? employees
-    : employees.filter(e => e.id === user.id);
+    : employees.filter(e => e.id === currentEmployee?.id);
+    
+
 
   const calculateHours = (startTime, endTime) => {
     const start = parseISO(`2000-01-01T${startTime}`);
@@ -120,18 +75,72 @@ const Timesheet = ({ user }) => {
     return calculateTotalHours(employeeId) * employee.hourlyRate;
   };
 
-  const handleMarkAttendance = (shiftId, status) => {
-    setShifts(shifts.map(shift => 
-      shift.id === shiftId ? { ...shift, status } : shift
-    ));
-    setNotification({ type: 'success', message: `Shift marked as ${status}` });
+  const handleMarkAttendance = async (shiftId, status) => {
+    try {
+      const updated = shifts.map(shift => shift.id === shiftId ? { ...shift, status } : shift);
+      const shift = updated.find(s => s.id === shiftId);
+      if (shift) {
+        await dataService.saveShift(shift);
+      }
+      onUpdateShifts(updated);
+      setNotification({ type: 'success', message: `Shift marked as ${status}` });
+    } catch (error) {
+      setNotification({ type: 'error', message: 'Failed to update shift' });
+    }
   };
 
-  const handleUpdateActualTimes = (shiftId, actualStartTime, actualEndTime) => {
-    setShifts(shifts.map(shift => 
-      shift.id === shiftId ? { ...shift, actualStartTime, actualEndTime } : shift
-    ));
-    setNotification({ type: 'success', message: 'Actual times updated' });
+
+
+  // Handle edit shift
+  const handleEditShift = (shift) => {
+    if (!isAdminOrManager) {
+      setNotification({ type: 'error', message: 'You do not have permission to edit shifts' });
+      return;
+    }
+    setEditingShift(shift);
+    // Navigate to shifts page for editing
+    window.location.href = `/shifts?edit=${shift.id}`;
+  };
+
+  // Handle delete shift with confirmation
+  const handleDeleteShift = (shiftId) => {
+    if (!isAdminOrManager) {
+      setNotification({ type: 'error', message: 'You do not have permission to delete shifts' });
+      return;
+    }
+    setShiftToDelete(shiftId);
+    setShowDeleteConfirm(true);
+  };
+
+  // Confirm delete shift
+  const confirmDeleteShift = async () => {
+    if (!shiftToDelete) return;
+    
+    try {
+      console.log('Timesheet: Attempting to delete shift:', shiftToDelete);
+      const result = await dataService.delete('shifts', shiftToDelete);
+      console.log('Timesheet: Delete result:', result);
+      
+      if (result) {
+        const updatedShifts = shifts.filter(s => s.id !== shiftToDelete);
+        onUpdateShifts(updatedShifts);
+        setNotification({ type: 'success', message: 'Shift deleted successfully' });
+      } else {
+        throw new Error('Delete operation returned false');
+      }
+    } catch (error) {
+      console.error('Timesheet: Error deleting shift:', error);
+      setNotification({ type: 'error', message: `Failed to delete shift: ${error.message}` });
+    } finally {
+      setShowDeleteConfirm(false);
+      setShiftToDelete(null);
+    }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setShiftToDelete(null);
   };
 
   const generateReport = () => {
@@ -213,6 +222,8 @@ const Timesheet = ({ user }) => {
 
   return (
     <div className="p-6 space-y-6">
+
+      
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -370,16 +381,20 @@ const Timesheet = ({ user }) => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredShifts.map(shift => (
-                <ShiftCard
-                  key={shift.id}
-                  shift={shift}
-                  employee={summaryEmployees.find(emp => emp.id === shift.employeeId)}
-                  onMarkAttendance={handleMarkAttendance}
-                  isEditable={true}
-                  showActions={true}
-                />
-              ))}
+                             {filteredShifts.map(shift => (
+                 <ShiftCard
+                   key={shift.id}
+                   shift={shift}
+                   employee={summaryEmployees.find(emp => emp.id === shift.employeeId)}
+                   onEdit={handleEditShift}
+                   onDelete={handleDeleteShift}
+                   onMarkAttendance={handleMarkAttendance}
+                   isEditable={isAdminOrManager}
+                   showActions={true}
+                   currentUser={user}
+                   currentEmployee={currentEmployee}
+                 />
+               ))}
             </div>
           )}
         </div>
@@ -465,6 +480,36 @@ const Timesheet = ({ user }) => {
               <button
                 onClick={() => setShowReportModal(false)}
                 className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-semibold mb-4 text-red-600">Delete Shift</h2>
+            
+            <div className="mb-6">
+              <p className="text-gray-700">
+                Are you sure you want to delete this shift? This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={confirmDeleteShift}
+                className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors"
+              >
+                Delete Shift
+              </button>
+              <button
+                onClick={cancelDelete}
+                className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 transition-colors"
               >
                 Cancel
               </button>

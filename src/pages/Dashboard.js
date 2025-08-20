@@ -1,44 +1,136 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
-const Dashboard = ({ user }) => {
+const Dashboard = ({ user, employees = [], shifts = [], notifications: appNotifications = [] }) => {
   const navigate = useNavigate();
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
   
   const [analytics, setAnalytics] = useState({
-    totalEmployees: 1,
-    totalShifts: 22,
-    hoursScheduled: 176,
-    hoursWorked: 176,
-    laborCost: 2640,
+    totalEmployees: 0,
+    totalShifts: 0,
+    hoursScheduled: 0,
+    hoursWorked: 0,
+    laborCost: 0,
     upcomingShifts: 0
   });
 
-  const [recentShifts, setRecentShifts] = useState([
-    {
-      id: 1,
-      employeeName: 'Bob Smith',
-      role: 'Cashier',
-      date: '2025-06-02',
-      startTime: '09:00',
-      endTime: '17:00',
-      status: 'completed'
-    },
-    {
-      id: 2,
-      employeeName: 'Bob Smith',
-      role: 'Cashier',
-      date: '2025-06-03',
-      startTime: '09:00',
-      endTime: '17:00',
-      status: 'completed'
-    }
-  ]);
+  const [recentShifts, setRecentShifts] = useState([]);
 
-  const [notifications, setNotifications] = useState([
-    { id: 1, type: 'success', message: 'Payment report generated for last week', time: '2 days ago' }
-  ]);
+  const [notifications, setNotifications] = useState([]);
+
+  // Calculate analytics from real data
+  useEffect(() => {
+    if (employees && shifts) {
+      const totalEmployees = employees.length;
+      const totalShifts = shifts.length;
+      
+      // Calculate hours scheduled
+      const hoursScheduled = shifts.reduce((total, shift) => {
+        const start = parseISO(`2000-01-01T${shift.startTime}`);
+        const end = parseISO(`2000-01-01T${shift.endTime}`);
+        const diffMs = end - start;
+        return total + Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+      }, 0);
+      
+      // Calculate hours worked (completed shifts)
+      const hoursWorked = shifts.filter(shift => shift.status === 'completed').reduce((total, shift) => {
+        const start = parseISO(`2000-01-01T${shift.startTime}`);
+        const end = parseISO(`2000-01-01T${shift.endTime}`);
+        const diffMs = end - start;
+        return total + Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+      }, 0);
+      
+      // Calculate labor cost
+      const laborCost = shifts.reduce((total, shift) => {
+        const employee = employees.find(emp => emp.id === shift.employeeId);
+        if (employee) {
+          const start = parseISO(`2000-01-01T${shift.startTime}`);
+          const end = parseISO(`2000-01-01T${shift.endTime}`);
+          const hours = Math.round((end - start) / (1000 * 60 * 60) * 10) / 10;
+          return total + (hours * employee.hourlyRate);
+        }
+        return total;
+      }, 0);
+      
+      // Count upcoming shifts (scheduled for today or future)
+      const today = new Date();
+      const upcomingShifts = shifts.filter(shift => {
+        const shiftDate = new Date(shift.date);
+        return shiftDate >= today && shift.status === 'scheduled';
+      }).length;
+      
+      setAnalytics({
+        totalEmployees,
+        totalShifts,
+        hoursScheduled,
+        hoursWorked,
+        laborCost: Math.round(laborCost),
+        upcomingShifts
+      });
+      
+      // Get recent shifts (last 5 completed shifts)
+      const recent = shifts
+        .filter(shift => shift.status === 'completed')
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 5);
+      
+      setRecentShifts(recent);
+      
+      // Use app notifications if available - show only latest 3 unread or recent
+      if (appNotifications.length > 0) {
+        console.log('=== DASHBOARD NOTIFICATION FILTERING ===');
+        console.log('Total app notifications:', appNotifications.length);
+        console.log('Current user:', user.id, user.role);
+        
+        const userNotifications = appNotifications.filter(notification => {
+          // Skip invalid notifications (null id, null userId, etc.)
+          if (!notification.id || (notification.userId === null && notification.recipientType !== 'all')) {
+            console.log(`Skipping invalid notification:`, notification.id);
+            return false;
+          }
+          
+          // Check if notification is for this user by ID (check both userId and recipientId fields)
+          const isForThisUser = notification.userId === user.id || notification.recipientId === user.id;
+          
+          // Check if notification is for this user's role
+          const isForThisRole = !notification.recipientRole || notification.recipientRole === user.role;
+          
+          // Check if notification is for all users
+          const isForAll = notification.recipientType === 'all';
+          
+          // Include notification if it's for this user or their role or for all users
+          const shouldInclude = isForThisUser || (isForThisRole && isForAll);
+          
+          console.log(`Dashboard Notification ${notification.id}:`, {
+            userId: notification.userId,
+            currentUserId: user.id,
+            recipientRole: notification.recipientRole,
+            currentUserRole: user.role,
+            isRead: notification.isRead,
+            isForThisUser,
+            isForThisRole,
+            isForAll,
+            shouldInclude
+          });
+          
+          return shouldInclude;
+        });
+        
+        console.log('User notifications after filtering:', userNotifications.length);
+        
+        // Sort by creation date (newest first) and take latest 3
+        const sortedNotifications = userNotifications
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 3);
+        
+        console.log('Final dashboard notifications:', sortedNotifications.length);
+        console.log('=== END DASHBOARD FILTERING ===');
+        
+        setNotifications(sortedNotifications);
+      }
+    }
+  }, [employees, shifts, appNotifications, user.id, user.role]);
 
   const getStatusColor = (status) => {
     const colors = {
@@ -85,7 +177,7 @@ const Dashboard = ({ user }) => {
       </div>
 
       {/* Analytics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isAdminOrManager && (
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
@@ -133,22 +225,6 @@ const Dashboard = ({ user }) => {
             </div>
           </div>
         </div>
-
-        {isAdminOrManager && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Labor Cost</p>
-                <p className="text-2xl font-semibold text-gray-900">${analytics.laborCost}</p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Main Content Grid */}
@@ -160,31 +236,43 @@ const Dashboard = ({ user }) => {
           </div>
           <div className="p-6">
             <div className="space-y-4">
-              {recentShifts.map(shift => (
-                <div key={shift.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-medium text-gray-600">
-                          {shift.employeeName.split(' ').map(n => n[0]).join('')}
+              {recentShifts.length > 0 ? (
+                recentShifts.map(shift => {
+                  const employee = employees.find(emp => emp.id === shift.employeeId);
+                  if (!employee) return null;
+                  
+                  return (
+                    <div key={shift.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium text-gray-600">
+                              {employee.name.split(' ').map(n => n[0]).join('')}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{employee.name}</p>
+                          <p className="text-sm text-gray-500">{shift.role}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-900">
+                          {format(parseISO(shift.date), 'MMM dd')} • {shift.startTime} - {shift.endTime}
+                        </p>
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(shift.status)}`}>
+                          {shift.status}
                         </span>
                       </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{shift.employeeName}</p>
-                      <p className="text-sm text-gray-500">{shift.role}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-900">
-                      {format(parseISO(shift.date), 'MMM dd')} • {shift.startTime} - {shift.endTime}
-                    </p>
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(shift.status)}`}>
-                      {shift.status}
-                    </span>
-                  </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No shifts completed yet</p>
+                  <p className="text-sm">Shifts will appear here once they are completed</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -196,17 +284,24 @@ const Dashboard = ({ user }) => {
           </div>
           <div className="p-6">
             <div className="space-y-4">
-              {notifications.map(notification => (
-                <div key={notification.id} className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    {getNotificationIcon(notification.type)}
+              {notifications.length > 0 ? (
+                notifications.map(notification => (
+                  <div key={notification.id} className="flex items-start space-x-3">
+                    <div className="flex-shrink-0">
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-900">{notification.message}</p>
+                      <p className="text-xs text-gray-500">{notification.time}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">{notification.message}</p>
-                    <p className="text-xs text-gray-500">{notification.time}</p>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No notifications</p>
+                  <p className="text-sm">Notifications will appear here</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -267,7 +362,7 @@ const Dashboard = ({ user }) => {
                 <svg className="w-8 h-8 text-purple-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                 </svg>
-                <p className="text-sm font-medium text-gray-900">Add Employee</p>
+                <p className="text-sm font-medium text-gray-900">Staff Management</p>
               </div>
             </button>
           )}

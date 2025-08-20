@@ -2,58 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { format, startOfWeek, endOfWeek, parseISO, addWeeks, subWeeks, startOfMonth, endOfMonth, addDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Shift, PayrollRecord, User, Notification } from '../models/index.js';
+import dataService from '../services/DataService.js';
 
-const Payroll = ({ user }) => {
+const Payroll = ({ user, employees = [], shifts = [], payrollRecords = [], onUpdatePayrollRecords }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
-  
-  const demoEmployees = [
-    { id: 1, name: 'Alice Johnson', hourlyRate: 18.50, role: 'Manager', email: 'alice.johnson@company.com', phone: '(555) 123-4567' },
-    { id: 2, name: 'Bob Smith', hourlyRate: 15.00, role: 'Employee', email: 'bob.smith@company.com', phone: '(555) 234-5678' },
-    { id: 3, name: 'Carol Davis', hourlyRate: 16.00, role: 'Employee', email: 'carol.davis@company.com', phone: '(555) 345-6789' },
-    { id: 4, name: 'David Wilson', hourlyRate: 15.50, role: 'Employee', email: 'david.wilson@company.com', phone: '(555) 456-7890' },
-    { id: 5, name: 'Emma Brown', hourlyRate: 14.50, role: 'Employee', email: 'emma.brown@company.com', phone: '(555) 567-8901' }
-  ];
-  // Always generate demo shifts for all employees
-  function generateDemoShifts() {
-    const shifts = [];
-    let shiftId = 1;
-    const year = 2025;
-    const month = 5; // June (0-based, 5 = June)
-    demoEmployees.forEach(emp => {
-      // For each day in June
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateObj = new Date(year, month, day);
-        const weekday = dateObj.getDay();
-        if (weekday === 0) continue; // skip Sundays
-        // Overtime on Saturdays
-        const isSaturday = weekday === 6;
-        const startHour = emp.id % 2 === 0 ? 9 : 8;
-        const endHour = emp.id % 2 === 0 ? 17 : 16;
-        const otStart = startHour;
-        const otEnd = isSaturday ? endHour + 2 : endHour;
-        const actualStartHour = otStart + (Math.random() * 0.5 - 0.25);
-        const actualEndHour = otEnd + (Math.random() * 0.5 - 0.25);
-        shifts.push({
-          id: shiftId++,
-          employeeId: emp.id,
-          employeeName: emp.name,
-          date: format(dateObj, 'yyyy-MM-dd'),
-          startTime: `${otStart.toString().padStart(2, '0')}:00`,
-          endTime: `${otEnd.toString().padStart(2, '0')}:00`,
-          actualStartTime: `${Math.floor(actualStartHour).toString().padStart(2, '0')}:${Math.floor((actualStartHour % 1) * 60).toString().padStart(2, '0')}`,
-          actualEndTime: `${Math.floor(actualEndHour).toString().padStart(2, '0')}:${Math.floor((actualEndHour % 1) * 60).toString().padStart(2, '0')}`,
-          status: 'completed',
-          hourlyRate: emp.hourlyRate
-        });
-      }
-    });
-    return shifts;
-  }
-  // Always use all demo shifts
-  const [shifts] = useState(generateDemoShifts());
-  // For employees, only show their own info in the UI, but use all demo shifts for calculations
-  const employees = isAdminOrManager ? demoEmployees : demoEmployees.filter(e => e.id === user.id);
+  // Employees and shifts now come from props (App state)
 
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [payrollPeriod, setPayrollPeriod] = useState('week');
@@ -66,11 +20,28 @@ const Payroll = ({ user }) => {
   const [notification, setNotification] = useState(null);
   const [noShiftsFound, setNoShiftsFound] = useState(false);
 
-  // Debug: Log shifts when component mounts
+  // Initialize selected employees when employees data becomes available (only once)
   useEffect(() => {
-    console.log('Generated shifts:', shifts);
-    console.log('Current date range:', getDateRange());
-  }, []);
+    if (employees.length > 0 && selectedEmployees.length === 0) {
+      if (isAdminOrManager) {
+        setSelectedEmployees(employees.map(emp => emp.id));
+      } else if (user?.id) {
+        setSelectedEmployees([user.id]);
+      }
+    }
+  }, [employees, isAdminOrManager, user?.id]); // Removed selectedEmployees.length dependency
+
+  // Clear payroll data when employees change
+  useEffect(() => {
+    setPayrollData([]);
+    setNoShiftsFound(false);
+  }, [selectedEmployees]);
+
+  // Clear payroll data when date range changes
+  useEffect(() => {
+    setPayrollData([]);
+    setNoShiftsFound(false);
+  }, [payrollPeriod, customDateRange]);
 
   // Calculate hours worked
   const calculateHours = (startTime, endTime) => {
@@ -111,45 +82,58 @@ const Payroll = ({ user }) => {
     }
   };
 
-  // Generate payroll data
-  const generatePayroll = () => {
+  // Generate payroll data (internal function, no notifications)
+  const generatePayrollData = (showNotification = false) => {
     if (selectedEmployees.length === 0) {
-      setNotification({ type: 'error', message: 'Please select at least one employee' });
+      if (showNotification) {
+        setNotification({ type: 'error', message: 'Please select at least one employee' });
+      }
       return;
     }
     setIsGenerating(true);
     const dateRange = getDateRange();
     const payroll = selectedEmployees.map(employeeId => {
       const employee = employees.find(e => e.id === employeeId);
+      
+      // Guard against undefined employee
+      if (!employee) {
+        console.warn(`Employee with ID ${employeeId} not found in employees list`);
+        return null;
+      }
+      
       const employeeShifts = shifts.filter(shift =>
         shift.employeeId === employeeId &&
         parseISO(shift.date) >= parseISO(dateRange.startDate) &&
         parseISO(shift.date) <= parseISO(dateRange.endDate) &&
         shift.status === 'completed'
       );
-      const totalHours = employeeShifts.reduce((total, shift) => {
-        const hours = calculateHours(shift.actualStartTime || shift.startTime, shift.actualEndTime || shift.endTime);
-        return total + (isNaN(hours) ? 0 : hours);
-      }, 0);
-      const regularHours = Math.min(totalHours, 40);
-      const overtimeHours = Math.max(0, totalHours - 40);
-      const overtimeRate = employee.hourlyRate * 1.5;
-      const regularPay = regularHours * employee.hourlyRate;
-      const overtimePay = overtimeHours * overtimeRate;
-      const totalPay = regularPay + overtimePay;
+      
+      // Create payroll record using the model
+      const payrollRecord = new PayrollRecord({
+        employeeId: employee.id,
+        employeeName: employee.name,
+        payPeriodStart: dateRange.startDate,
+        payPeriodEnd: dateRange.endDate,
+        hourlyRate: employee.hourlyRate,
+        shifts: employeeShifts
+      });
+      
+      // Calculate payroll from shifts using model method
+      payrollRecord.calculateFromShifts(employeeShifts);
+      
       return {
         employeeId: employee.id,
         employeeName: employee.name,
         hourlyRate: employee.hourlyRate,
-        totalHours: isNaN(totalHours) ? 0 : totalHours,
-        regularHours: isNaN(regularHours) ? 0 : regularHours,
-        overtimeHours: isNaN(overtimeHours) ? 0 : overtimeHours,
-        regularPay: isNaN(regularPay) ? 0 : regularPay,
-        overtimePay: isNaN(overtimePay) ? 0 : overtimePay,
-        totalPay: isNaN(totalPay) ? 0 : totalPay,
+        totalHours: payrollRecord.totalHours,
+        regularHours: payrollRecord.regularHours,
+        overtimeHours: payrollRecord.overtimeHours,
+        regularPay: payrollRecord.regularPay,
+        overtimePay: payrollRecord.overtimePay,
+        totalPay: payrollRecord.totalPay,
         shifts: employeeShifts.length,
         dailyData: employeeShifts.map(shift => {
-          const hours = calculateHours(shift.actualStartTime || shift.startTime, shift.actualEndTime || shift.endTime);
+          const hours = shift.getActualDuration() || shift.getDuration();
           return {
             date: shift.date,
             day: format(parseISO(shift.date), 'EEE'),
@@ -160,11 +144,29 @@ const Payroll = ({ user }) => {
           };
         })
       };
-    });
+    }).filter(Boolean); // Remove null entries
     setPayrollData(payroll);
     setIsGenerating(false);
     setNoShiftsFound(payroll.every(emp => emp.shifts === 0));
-    setNotification({ type: 'success', message: 'Payroll generated successfully' });
+    
+    // Only show success notification if explicitly requested
+    if (showNotification) {
+      setNotification({ type: 'success', message: 'Payroll generated successfully' });
+    }
+    
+    // Create notification for payroll ready (only when manually generated)
+    if (payroll.length > 0 && showNotification) {
+      const notification = Notification.createPayrollReady(
+        payroll[0].employeeName,
+        `${dateRange.startDate} to ${dateRange.endDate}`
+      );
+      console.log('Payroll ready notification:', notification.toJSON());
+    }
+  };
+
+  // Generate payroll data manually (with notification)
+  const generatePayroll = () => {
+    generatePayrollData(true);
   };
 
   // Generate PDF
@@ -299,20 +301,31 @@ const Payroll = ({ user }) => {
 
   // Handle employee selection
   const handleEmployeeSelection = (employeeId) => {
+    console.log('Employee selection clicked:', employeeId);
+    console.log('Current selected employees:', selectedEmployees);
+    
     if (selectedEmployees.includes(employeeId)) {
-      setSelectedEmployees(selectedEmployees.filter(id => id !== employeeId));
+      const newSelection = selectedEmployees.filter(id => id !== employeeId);
+      console.log('Removing employee, new selection:', newSelection);
+      setSelectedEmployees(newSelection);
     } else {
-      setSelectedEmployees([...selectedEmployees, employeeId]);
+      const newSelection = [...selectedEmployees, employeeId];
+      console.log('Adding employee, new selection:', newSelection);
+      setSelectedEmployees(newSelection);
     }
   };
 
   // Select all employees
   const selectAllEmployees = () => {
-    setSelectedEmployees(employees.map(emp => emp.id));
+    console.log('Select All clicked - employees:', employees);
+    const allEmployeeIds = employees.map(emp => emp.id);
+    console.log('Setting selected employees to:', allEmployeeIds);
+    setSelectedEmployees(allEmployeeIds);
   };
 
   // Clear selection
   const clearSelection = () => {
+    console.log('Clear All clicked - clearing selection');
     setSelectedEmployees([]);
   };
 
@@ -368,6 +381,28 @@ const Payroll = ({ user }) => {
           >
             Export PDF
           </button>
+        </div>
+      </div>
+
+      {/* Current Date Range Display */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-sm font-medium text-blue-800">Current Payroll Period:</span>
+          </div>
+          <div className="text-right">
+            <div className="text-lg font-semibold text-blue-900">
+              {format(parseISO(getDateRange().startDate), 'MMM dd, yyyy')} - {format(parseISO(getDateRange().endDate), 'MMM dd, yyyy')}
+            </div>
+            <div className="text-sm text-blue-700">
+              {payrollPeriod === 'week' ? 'This Week' : 
+               payrollPeriod === 'biweekly' ? 'Bi-Weekly' : 
+               payrollPeriod === 'month' ? 'This Month' : 'Custom Range'}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -490,17 +525,24 @@ const Payroll = ({ user }) => {
       {/* Employee Selection */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Select Employees</h2>
+          <div className="flex items-center space-x-3">
+            <h2 className="text-lg font-semibold text-gray-900">Select Employees</h2>
+            <span className="text-sm text-gray-500">
+              {selectedEmployees.length} of {employees.length} selected
+            </span>
+          </div>
           <div className="flex space-x-2">
             <button
               onClick={selectAllEmployees}
-              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+              disabled={selectedEmployees.length === employees.length}
+              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
             >
               Select All
             </button>
             <button
               onClick={clearSelection}
-              className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              disabled={selectedEmployees.length === 0}
+              className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
             >
               Clear All
             </button>
@@ -586,6 +628,42 @@ const Payroll = ({ user }) => {
               </tfoot>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Empty State Message */}
+      {payrollData.length === 0 && selectedEmployees.length > 0 && !noShiftsFound && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+          <svg className="w-12 h-12 text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h3 className="text-lg font-medium text-blue-900 mb-2">Ready to Generate Payroll</h3>
+          <p className="text-blue-700 mb-4">
+            Click "Generate Payroll" to calculate pay for the selected employees and period.
+          </p>
+          <div className="text-sm text-blue-600">
+            <p>Current period: {format(parseISO(getDateRange().startDate), 'MMM dd, yyyy')} - {format(parseISO(getDateRange().endDate), 'MMM dd, yyyy')}</p>
+            <p>Selected employees: {selectedEmployees.length}</p>
+          </div>
+        </div>
+      )}
+
+      {/* No Employees Selected Message */}
+      {selectedEmployees.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+          <svg className="w-12 h-12 text-yellow-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+          </svg>
+          <h3 className="text-lg font-medium text-yellow-900 mb-2">No Employees Selected</h3>
+          <p className="text-yellow-700 mb-4">
+            Please select at least one employee to generate payroll data.
+          </p>
+          <button
+            onClick={selectAllEmployees}
+            className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700"
+          >
+            Select All Employees
+          </button>
         </div>
       )}
 

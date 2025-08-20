@@ -1,66 +1,107 @@
-import React, { useState, useEffect } from 'react';
-import { format, addWeeks, subWeeks, parseISO } from 'date-fns';
+import React, { useState, useEffect, useRef } from 'react';
+import { format, addWeeks, subWeeks, parseISO, startOfWeek, addDays } from 'date-fns';
 import ScheduleGrid from '../components/ScheduleGrid';
 import ShiftCard from '../components/ShiftCard';
+import ShiftEditModal from '../components/ShiftEditModal';
 import NotificationBanner from '../components/NotificationBanner';
+import { Shift, User, Notification } from '../models/index.js';
+import { populateEmployeeNames, getEmployeeName } from '../models/utils.js';
+import dataService from '../services/DataService.js';
+import notificationService from '../services/NotificationService.js';
 
-const Shifts = ({ user }) => {
+const Shifts = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
-  const demoEmployees = [
-    { id: 1, name: 'Alice Johnson', role: 'Employee', skills: ['barista', 'cashier'], hourlyRate: 18 },
-    { id: 2, name: 'Bob Smith', role: 'Employee', skills: ['cashier', 'cleaning'], hourlyRate: 15 },
-    { id: 3, name: 'Carol Davis', role: 'Employee', skills: ['kitchen', 'food-prep'], hourlyRate: 16 },
-    { id: 4, name: 'David Wilson', role: 'Employee', skills: ['barista', 'coffee-making'], hourlyRate: 15 },
-    { id: 5, name: 'Emma Brown', role: 'Employee', skills: ['cashier'], hourlyRate: 14.5 }
-  ];
+  
+  // Get display name for user (full name from employee record or fallback to username)
+  const getDisplayName = () => {
+    if (user?.email && employees.length > 0) {
+      const employee = employees.find(emp => emp.email === user.email || emp.userId === user.id || emp.id === user.id);
+      if (employee) return employee.name;
+    }
+    return user?.username || user?.email || 'Unknown User';
+  };
+  
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [shifts, setShifts] = useState([]);
-  const [employees, setEmployees] = useState(demoEmployees);
 
-  useEffect(() => {
-    setShifts(generateDemoShiftsForWeek(currentDate));
-  }, [currentDate]);
 
-  function generateDemoShiftsForWeek(dateInWeek) {
-    const weekStart = new Date(dateInWeek);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Monday
+
+  function generateDemoShiftsForWeek(dateInWeek, employeesList) {
+    const weekStart = startOfWeek(dateInWeek, { weekStartsOn: 1 });
     const shifts = [];
     let shiftId = 1;
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(weekStart);
-      date.setDate(weekStart.getDate() + i);
-      if (date.getDay() === 0) continue; // skip Sundays
-      demoEmployees.forEach(emp => {
-        let status = 'completed';
-        if (date.getMonth() === 6 && date.getFullYear() === 2025) {
-          if (date.getDate() % 3 === 0) status = 'in-progress';
-          else if (date.getDate() % 2 === 0) status = 'scheduled';
+    
+    // Generate shifts for each day of the week (Monday to Friday)
+    for (let i = 0; i < 5; i++) {
+      const date = addDays(weekStart, i);
+      
+      // Create shifts for each employee
+      employeesList.forEach(emp => {
+        let status = 'scheduled';
+        
+        // Determine status based on date (past = completed, current = in-progress, future = scheduled)
+        const today = new Date();
+        const shiftDate = new Date(date);
+        
+        if (shiftDate < today) {
+          status = 'completed';
+        } else if (shiftDate.toDateString() === today.toDateString()) {
+          status = 'in-progress';
         }
-        shifts.push({
+        
+        // Create shift using the Shift model
+        const shift = new Shift({
           id: shiftId++,
           employeeId: emp.id,
           employeeName: emp.name,
           date: date.toISOString().slice(0, 10),
           startTime: '09:00',
           endTime: '17:00',
-          role: emp.skills[0],
+          role: emp.getPrimaryDepartment() || 'cashier',
           status,
           notes: '',
+          hourlyRate: emp.hourlyRate
         });
+        
+        shifts.push(shift);
       });
     }
+    
     return shifts;
   }
 
-  // Only show Bob's shifts for Bob, all for managers/admins
+  // Find the employee record for the logged-in user
+  const currentEmployee = employees.find(emp => 
+    emp.email === user.email || 
+    emp.userId === user.id || 
+    emp.id === user.id
+  );
+  
+
+  
+  // Populate employee names for all shifts to fix "Unknown Employee" issue
+  const shiftsWithEmployeeNames = populateEmployeeNames(shifts, employees);
+  
+  // Only show current employee's shifts for employees, all for managers/admins
   const visibleShifts = isAdminOrManager
-    ? shifts
-    : shifts.filter(shift => shift.employeeId === user.id);
+    ? shiftsWithEmployeeNames
+    : shiftsWithEmployeeNames.filter(shift => shift.employeeId === currentEmployee?.id);
+    
+  // If no shifts are loaded and user is admin/manager, show a message
+  const noShiftsMessage = shifts.length === 0 && isAdminOrManager 
+    ? 'No shifts have been created yet. Use the "Create Shift" button to add shifts.'
+    : shifts.length === 0 && !isAdminOrManager
+    ? 'No shifts have been assigned to you yet.'
+    : null;
+    
+
 
   const [showShiftModal, setShowShiftModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingShift, setEditingShift] = useState(null);
   const [selectedShift, setSelectedShift] = useState(null);
   const [conflicts, setConflicts] = useState([]);
   const [notification, setNotification] = useState(null);
+  const [employeeSearch, setEmployeeSearch] = useState('');
 
   const [shiftForm, setShiftForm] = useState({
     employeeId: '',
@@ -70,95 +111,359 @@ const Shifts = ({ user }) => {
     role: 'cashier',
     notes: ''
   });
+  
+  // Ref to prevent duplicate conflict notifications
+  const conflictsCheckedRef = useRef(false);
 
-  // Check for conflicts
+
+
+  // Check for conflicts - only run when shifts or employees change, not on every render
   useEffect(() => {
-    const newConflicts = [];
+    // Prevent running if no shifts or employees loaded yet
+    if (!shifts.length || !employees.length) return;
     
-    shifts.forEach(shift => {
-      // Check for overlapping shifts for same employee
-      const overlapping = shifts.filter(s => 
-        s.id !== shift.id && 
-        s.employeeId === shift.employeeId &&
-        s.date === shift.date &&
-        ((s.startTime < shift.endTime && s.endTime > shift.startTime) ||
-         (shift.startTime < s.endTime && shift.endTime > s.startTime))
-      );
+    // Prevent duplicate conflict checks
+    if (conflictsCheckedRef.current) return;
+    
+    const checkConflicts = async () => {
+      const newConflicts = [];
       
-      if (overlapping.length > 0) {
-        newConflicts.push({
-          type: 'overlap',
-          shiftId: shift.id,
-          message: `Overlapping shifts for ${employees.find(e => e.id === shift.employeeId)?.name}`
-        });
+      // Only check conflicts for shifts that are visible to the current user
+      const shiftsToCheck = isAdminOrManager ? shifts : visibleShifts;
+      
+      for (const shift of shiftsToCheck) {
+        // Check for overlapping shifts for same employee using model method
+        const overlapping = shifts.filter(s => 
+          s.id !== shift.id && shift.overlapsWith(s)
+        );
+        
+        if (overlapping.length > 0) {
+          const employeeName = shift.employeeName || employees.find(e => e.id === shift.employeeId)?.name || `Employee ${shift.employeeId}`;
+          newConflicts.push({
+            type: 'overlap',
+            shiftId: shift.id,
+            message: `Overlapping shifts for ${employeeName}`
+          });
+          
+          // Only create conflict notification if it doesn't already exist
+          try {
+            const existingNotifications = await dataService.getAll('notifications');
+            const conflictExists = existingNotifications.some(n => 
+              n.type === 'warning' && 
+              n.category === 'shift' && 
+              n.metadata?.conflictType === 'Shift Overlap' &&
+              n.metadata?.employeeName === employeeName &&
+              n.metadata?.date === shift.date
+            );
+            
+            if (!conflictExists) {
+              await notificationService.createConflictNotification(
+                'Shift Overlap',
+                employeeName,
+                shift.date,
+                `${shift.startTime} - ${shift.endTime}`,
+                'high'
+              );
+            }
+          } catch (error) {
+            console.error('Error creating conflict notification:', error);
+          }
+        }
+
+        // Check for overtime (more than 8 hours per day)
+        const sameDayShifts = shifts.filter(s => 
+          s.employeeId === shift.employeeId && 
+          s.date === shift.date
+        );
+        
+        const totalHours = sameDayShifts.reduce((total, s) => {
+          const start = parseISO(`2000-01-01T${s.startTime}`);
+          const end = parseISO(`2000-01-01T${s.endTime}`);
+          return total + (end - start) / (1000 * 60 * 60);
+        }, 0);
+
+        if (totalHours > 8) {
+          const employeeName = shift.employeeName || employees.find(e => e.id === shift.employeeId)?.name || `Employee ${shift.employeeId}`;
+          newConflicts.push({
+            type: 'overtime',
+            shiftId: shift.id,
+            message: `Overtime alert: ${employeeName} has ${totalHours.toFixed(1)} hours`
+          });
+        }
       }
 
-      // Check for overtime (more than 8 hours per day)
-      const sameDayShifts = shifts.filter(s => 
-        s.employeeId === shift.employeeId && 
-        s.date === shift.date
-      );
-      
-      const totalHours = sameDayShifts.reduce((total, s) => {
-        const start = parseISO(`2000-01-01T${s.startTime}`);
-        const end = parseISO(`2000-01-01T${s.endTime}`);
-        return total + (end - start) / (1000 * 60 * 60);
-      }, 0);
+      setConflicts(newConflicts);
+      conflictsCheckedRef.current = true; // Mark as checked
+    };
 
-      if (totalHours > 8) {
-        newConflicts.push({
-          type: 'overtime',
-          shiftId: shift.id,
-          message: `Overtime alert: ${employees.find(e => e.id === shift.employeeId)?.name} has ${totalHours.toFixed(1)} hours`
-        });
-      }
-    });
+    checkConflicts();
+  }, [shifts, employees, isAdminOrManager, visibleShifts]);
 
-    setConflicts(newConflicts);
-  }, [shifts, employees]);
+  const handleCreateShift = async () => {
+    // Check if user has permission to create shifts
+    if (!isAdminOrManager) {
+      setNotification({ type: 'error', message: 'You do not have permission to create shifts' });
+      return;
+    }
 
-  const handleCreateShift = () => {
     if (!shiftForm.employeeId) {
       setNotification({ type: 'error', message: 'Please select an employee' });
       return;
     }
 
-    const newShift = {
+    // Get the employee details to include the name
+    const selectedEmployee = employees.find(emp => emp.id === parseInt(shiftForm.employeeId));
+    
+    // Create new shift using the Shift model
+    const newShift = new Shift({
       id: Date.now(),
-      ...shiftForm,
-      status: 'scheduled'
-    };
-
-    setShifts([...shifts, newShift]);
-    setShowShiftModal(false);
-    setShiftForm({
-      employeeId: '',
-      date: format(new Date(), 'yyyy-MM-dd'),
-      startTime: '09:00',
-      endTime: '17:00',
-      role: 'cashier',
-      notes: ''
+      employeeId: parseInt(shiftForm.employeeId),
+      employeeName: selectedEmployee.name,
+      date: shiftForm.date,
+      startTime: shiftForm.startTime,
+      endTime: shiftForm.endTime,
+      role: shiftForm.role,
+      status: 'scheduled',
+      notes: shiftForm.notes,
+      hourlyRate: selectedEmployee.hourlyRate || 15
     });
-    setNotification({ type: 'success', message: 'Shift created successfully' });
+
+    try {
+      await dataService.saveShift(newShift);
+      onUpdateShifts([...shifts, newShift]);
+      
+               // Create notification for the employee about their new shift
+         try {
+           // Find the user ID for the employee by matching email
+           const users = await dataService.getAll('users');
+           const employeeUser = users.find(u => u.email === selectedEmployee.email);
+           
+           if (employeeUser) {
+             const shiftNotification = new Notification({
+               type: 'info',
+               title: 'New Shift Assigned',
+               message: `You have been assigned a new shift on ${format(parseISO(newShift.date), 'MMM dd, yyyy')} from ${newShift.startTime} to ${newShift.endTime}`,
+               userId: employeeUser.id,
+               recipientRole: 'Employee', // Role-based for employee
+               recipientId: employeeUser.id, // Specific employee user ID
+               createdBy: getDisplayName(), // Manager created this notification for employee
+               category: 'shift',
+               priority: 'normal',
+               actionUrl: '/shifts',
+               actionText: 'View My Schedule',
+               metadata: {
+                 actionType: 'created',
+                 createdBy: getDisplayName(),
+                 createdAt: new Date().toISOString(),
+                 shiftDetails: `Date: ${format(parseISO(newShift.date), 'MMM dd, yyyy')} • Time: ${newShift.startTime} - ${newShift.endTime} • Role: ${newShift.role}`
+               }
+             });
+           
+             console.log('Creating shift notification for employee:', shiftNotification);
+             await notificationService.createNotification(shiftNotification);
+           }
+      } catch (notificationError) {
+        console.error('Error creating shift notification:', notificationError);
+        // Don't let notification error break the shift creation
+      }
+      
+      setShowShiftModal(false);
+      setShiftForm({
+        employeeId: '',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        startTime: '09:00',
+        endTime: '17:00',
+        role: 'cashier',
+        notes: ''
+      });
+      setNotification({ type: 'success', message: 'Shift created successfully' });
+    } catch (error) {
+      console.error('Error saving shift:', error);
+      setNotification({ type: 'error', message: 'Failed to create shift' });
+    }
   };
 
-  const handleUpdateShift = (updatedShift) => {
-    setShifts(shifts.map(s => s.id === updatedShift.id ? updatedShift : s));
-    setNotification({ type: 'success', message: 'Shift updated successfully' });
+  const handleUpdateShift = async (updatedProperties) => {
+    // Check if user has permission to update shifts
+    if (!isAdminOrManager) {
+      setNotification({ type: 'error', message: 'You do not have permission to update shifts' });
+      return;
+    }
+
+    try {
+      // Find the existing shift and update it using model methods
+      const existingShift = shifts.find(s => s.id === updatedProperties.id);
+      if (existingShift) {
+        // Store original values for comparison
+        const originalDate = existingShift.date;
+        const originalStartTime = existingShift.startTime;
+        const originalEndTime = existingShift.endTime;
+        const originalEmployeeId = existingShift.employeeId;
+        
+        // Update the shift properties
+        Object.assign(existingShift, updatedProperties);
+        
+        // Ensure the employeeName field is preserved
+        if (!existingShift.employeeName) {
+          existingShift.employeeName = employees.find(e => e.id === existingShift.employeeId)?.name;
+        }
+        
+        // Save to file
+        await dataService.saveShift(existingShift);
+        onUpdateShifts([...shifts]); // Trigger re-render
+        
+        // Create notification for the employee if significant changes were made
+        try {
+          const hasSignificantChanges = 
+            originalDate !== existingShift.date ||
+            originalStartTime !== existingShift.startTime ||
+            originalEndTime !== existingShift.endTime ||
+            originalEmployeeId !== existingShift.employeeId;
+          
+          if (hasSignificantChanges) {
+            const users = await dataService.getAll('users');
+            const employee = employees.find(e => e.id === existingShift.employeeId);
+            const employeeUser = users.find(u => u.email === employee?.email);
+            
+                         if (employeeUser && employee) {
+                               const shiftUpdateNotification = new Notification({
+                  type: 'warning',
+                  title: 'Shift Updated',
+                  message: `Your shift on ${format(parseISO(existingShift.date), 'MMM dd, yyyy')} has been updated. New time: ${existingShift.startTime} to ${existingShift.endTime}`,
+                  userId: employeeUser.id,
+                  recipientRole: 'Employee', // Role-based for employee
+                  recipientId: employeeUser.id, // Specific employee user ID
+                  createdBy: getDisplayName(), // Manager created this notification for employee
+                  category: 'shift',
+                  priority: 'normal',
+                  actionUrl: '/shifts',
+                  actionText: 'View My Schedule',
+                  metadata: {
+                    actionType: 'updated',
+                    updatedBy: getDisplayName(),
+                    updatedAt: new Date().toISOString(),
+                    shiftDetails: `Date: ${format(parseISO(existingShift.date), 'MMM dd, yyyy')} • New Time: ${existingShift.startTime} - ${existingShift.endTime}`
+                  }
+                });
+               
+                               await notificationService.createNotification(shiftUpdateNotification);
+              }
+          }
+        } catch (notificationError) {
+
+          // Don't let notification error break the shift update
+        }
+        
+        setNotification({ type: 'success', message: 'Shift updated successfully' });
+      }
+    } catch (error) {
+      console.error('Error updating shift:', error);
+      setNotification({ type: 'error', message: 'Failed to update shift' });
+    }
   };
 
-  const handleDeleteShift = (shiftId) => {
-    setShifts(shifts.filter(s => s.id !== shiftId));
-    setNotification({ type: 'success', message: 'Shift deleted successfully' });
+  const handleDeleteShift = async (shiftId) => {
+    // Check if user has permission to delete shifts
+    if (!isAdminOrManager) {
+      setNotification({ type: 'error', message: 'You do not have permission to delete shifts' });
+      return;
+    }
+
+    try {
+
+      
+      // Find the shift to be deleted to get employee info for notification
+      const shiftToDelete = shifts.find(s => s.id === shiftId);
+      
+      const result = await dataService.delete('shifts', shiftId);
+
+      
+      if (result) {
+        const updatedShifts = shifts.filter(s => s.id !== shiftId);
+
+        onUpdateShifts(updatedShifts);
+        
+        // Create notification for the employee about shift cancellation
+        if (shiftToDelete) {
+          try {
+            const users = await dataService.getAll('users');
+            const employee = employees.find(e => e.id === shiftToDelete.employeeId);
+            const employeeUser = users.find(u => u.email === employee?.email);
+            
+                         if (employeeUser && employee) {
+                                                               const shiftCancelNotification = new Notification({
+                  type: 'error',
+                  title: 'Shift Cancelled',
+                  message: `Your shift on ${format(parseISO(shiftToDelete.date), 'MMM dd, yyyy')} from ${shiftToDelete.startTime} to ${shiftToDelete.endTime} has been cancelled`,
+                  userId: employeeUser.id,
+                  recipientRole: 'Employee', // Role-based for employee
+                  recipientId: employeeUser.id, // Specific employee user ID
+                  createdBy: getDisplayName(), // Manager created this notification for employee
+                  category: 'shift',
+                  priority: 'high',
+                  actionUrl: '/shifts',
+                  actionText: 'View My Schedule',
+                  metadata: {
+                    actionType: 'deleted',
+                    deletedBy: getDisplayName(),
+                    deletedAt: new Date().toISOString(),
+                    shiftDetails: `Date: ${format(parseISO(shiftToDelete.date), 'MMM dd, yyyy')} • Time: ${shiftToDelete.startTime} - ${shiftToDelete.endTime} • Role: ${shiftToDelete.role}`
+                  }
+                });
+               
+                               await notificationService.createNotification(shiftCancelNotification);
+              }
+          } catch (notificationError) {
+
+            // Don't let notification error break the shift deletion
+          }
+        }
+        
+        setNotification({ type: 'success', message: 'Shift deleted successfully' });
+      } else {
+        throw new Error('Delete operation returned false');
+      }
+    } catch (error) {
+      console.error('Error deleting shift:', error);
+      setNotification({ type: 'error', message: `Failed to delete shift: ${error.message}` });
+    }
   };
 
-  const handleMarkAttendance = (shiftId, status) => {
-    setShifts(shifts.map(s => s.id === shiftId ? { ...s, status } : s));
-    setNotification({ type: 'success', message: `Shift marked as ${status}` });
+  const handleMarkAttendance = async (shiftId, status) => {
+    try {
+      const shift = shifts.find(s => s.id === shiftId);
+      if (shift) {
+        // Check if user has permission to mark attendance for this shift
+        if (!isAdminOrManager && currentEmployee?.id !== shift.employeeId) {
+          setNotification({ type: 'error', message: 'You can only mark attendance for your own shifts' });
+          return;
+        }
+
+        shift.status = status;
+        await dataService.saveShift(shift);
+        onUpdateShifts([...shifts]); // Trigger re-render
+        setNotification({ type: 'success', message: `Shift marked as ${status}` });
+      }
+    } catch (error) {
+      console.error('Error marking attendance:', error);
+      setNotification({ type: 'error', message: 'Failed to mark attendance' });
+    }
   };
 
   const getEligibleEmployees = (role) => {
-    return employees.filter(emp => emp.skills.includes(role));
+    // Always show all employees regardless of role for now
+    // This ensures all saved employees are visible in the dropdown
+    const allEmployees = employees || [];
+    
+    if (!employeeSearch) return allEmployees;
+    
+    const q = employeeSearch.toLowerCase();
+    const filtered = allEmployees.filter(emp => 
+      emp.name.toLowerCase().includes(q) || 
+      (emp.email || '').toLowerCase().includes(q)
+    );
+
+    return filtered;
   };
 
   const getEmployeeById = (id) => {
@@ -171,8 +476,20 @@ const Shifts = ({ user }) => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+             {/* Data Loading Status */}
+       {employees.length === 0 && (
+         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+           <div className="flex items-center">
+             <svg className="w-5 h-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+             </svg>
+             <p className="text-blue-800">Loading employee data...</p>
+           </div>
+         </div>
+       )}
+       
+       {/* Header */}
+       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
             {isAdminOrManager ? 'Shift Management' : 'My Schedule'}
@@ -208,6 +525,8 @@ const Shifts = ({ user }) => {
         </div>  
       </div>
 
+
+
       {/* Conflicts Banner */}
       {conflicts.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -225,15 +544,56 @@ const Shifts = ({ user }) => {
         </div>
       )}
 
-      {/* Schedule Grid */}
-      <ScheduleGrid
-        shifts={visibleShifts}
-        employees={employees}
-        onShiftUpdate={handleUpdateShift}
-        onShiftCreate={handleCreateShift}
-        onShiftDelete={handleDeleteShift}
-        currentDate={currentDate}
-      />
+             {/* Schedule Grid */}
+       <ScheduleGrid
+         shifts={visibleShifts}
+         employees={employees}
+         onShiftUpdate={handleUpdateShift}
+         onShiftCreate={handleCreateShift}
+         onShiftDelete={handleDeleteShift}
+         currentDate={currentDate}
+       />
+
+       {/* Shifts List with Delete Functionality */}
+       <div className="bg-white rounded-lg shadow">
+         <div className="px-6 py-4 border-b border-gray-200">
+           <h2 className="text-lg font-semibold text-gray-900">All Shifts ({visibleShifts.length})</h2>
+           <p className="text-sm text-gray-600">Manage individual shifts with full actions</p>
+         </div>
+         <div className="p-6">
+           {visibleShifts.length === 0 ? (
+             <div className="text-center py-8">
+               <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
+               </svg>
+               <p className="text-gray-500">{noShiftsMessage || 'No shifts found'}</p>
+               {isAdminOrManager && shifts.length === 0 && (
+                 <p className="text-sm text-gray-400 mt-2">The system is ready to create shifts. No data has been loaded yet.</p>
+               )}
+             </div>
+           ) : (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+               {visibleShifts.map(shift => (
+                 <ShiftCard
+                   key={shift.id}
+                   shift={shift}
+                   employee={employees.find(emp => emp.id === shift.employeeId)}
+                   onEdit={(shift) => {
+                     setEditingShift(shift);
+                     setShowEditModal(true);
+                   }}
+                   onDelete={handleDeleteShift}
+                   onMarkAttendance={handleMarkAttendance}
+                   isEditable={isAdminOrManager}
+                   showActions={true}
+                   currentUser={user}
+                   currentEmployee={currentEmployee}
+                 />
+               ))}
+             </div>
+           )}
+         </div>
+       </div>
 
       {/* Shift Creation Modal */}
       {showShiftModal && (
@@ -244,17 +604,49 @@ const Shifts = ({ user }) => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Employee</label>
+                <input
+                  type="text"
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  placeholder="Search by name or email..."
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
                 <select
                   value={shiftForm.employeeId}
                   onChange={(e) => setShiftForm({ ...shiftForm, employeeId: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-2 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Employee</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
-                  ))}
-                </select>
-              </div>
+                  {(() => {
+                    const eligibleEmployees = getEligibleEmployees(shiftForm.role);
+
+                    
+                    if (eligibleEmployees.length === 0) {
+                      return <option value="" disabled>No employees available</option>;
+                    }
+                    
+                    return eligibleEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                    ));
+                  })()}
+                                  </select>
+                  {(() => {
+                    const eligibleEmployees = getEligibleEmployees(shiftForm.role);
+                    if (eligibleEmployees.length === 0) {
+                      return (
+                        <p className="mt-1 text-sm text-amber-600">
+                          No employees found for this role. 
+                          {employees && employees.length > 0 ? (
+                            <span> Try selecting a different role or create employees first.</span>
+                          ) : (
+                            <span> No employees exist yet. Please create employees in Staff Management first.</span>
+                          )}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
@@ -291,13 +683,17 @@ const Shifts = ({ user }) => {
                 <label className="block text-sm font-medium text-gray-700">Role</label>
                 <select
                   value={shiftForm.role}
-                  onChange={(e) => setShiftForm({ ...shiftForm, role: e.target.value })}
+                  onChange={(e) => setShiftForm({ ...shiftForm, role: e.target.value, employeeId: '' })}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="cashier">Cashier</option>
                   <option value="barista">Barista</option>
                   <option value="kitchen">Kitchen</option>
-                  <option value="manager">Manager</option>
+                  <option value="cleaning">Cleaning</option>
+                  <option value="food-prep">Food Prep</option>
+                  <option value="coffee-making">Coffee Making</option>
+                  <option value="baking">Baking</option>
+                  <option value="management">Management</option>
                 </select>
               </div>
 
@@ -328,6 +724,20 @@ const Shifts = ({ user }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Shift Edit Modal */}
+      {showEditModal && editingShift && (
+        <ShiftEditModal
+          shift={editingShift}
+          employees={employees}
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingShift(null);
+          }}
+          onSave={handleUpdateShift}
+        />
       )}
 
       {/* Notification */}

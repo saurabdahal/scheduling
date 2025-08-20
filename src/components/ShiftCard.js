@@ -1,5 +1,6 @@
 import React from 'react';
 import { format, parseISO } from 'date-fns';
+import { Shift } from '../models/index.js';
 
 const ShiftCard = ({ 
   shift, 
@@ -8,7 +9,8 @@ const ShiftCard = ({
   onDelete, 
   onMarkAttendance,
   isEditable = true,
-  showActions = true 
+  showActions = true,
+  currentUser = null
 }) => {
   const getRoleColor = (role) => {
     const colors = {
@@ -22,6 +24,11 @@ const ShiftCard = ({
   };
 
   const getStatusColor = (status) => {
+    // Use the Shift model's status color method if available
+    if (shift && typeof shift.getStatusColor === 'function') {
+      return shift.getStatusColor();
+    }
+    
     const colors = {
       'scheduled': 'bg-blue-100 text-blue-800',
       'in-progress': 'bg-yellow-100 text-yellow-800',
@@ -41,11 +48,50 @@ const ShiftCard = ({
   };
 
   const getShiftDuration = () => {
+    // Use the Shift model's duration method if available
+    if (shift && typeof shift.getDuration === 'function') {
+      return `${shift.getDuration().toFixed(1)}h`;
+    }
+    
     const start = parseISO(`2000-01-01T${shift.startTime}`);
     const end = parseISO(`2000-01-01T${shift.endTime}`);
     const diffMs = end - start;
     const diffHours = Math.round(diffMs / (1000 * 60 * 60) * 10) / 10;
     return `${diffHours}h`;
+  };
+
+  // Check if current user can edit/delete this shift
+  const canEditShift = () => {
+    if (!currentUser) return false;
+    
+    // Admins and Managers can edit any shift
+    if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+      return true;
+    }
+    
+    // Employees cannot edit any shifts (including their own)
+    return false;
+  };
+
+  // Check if current user can mark attendance (start/end shift)
+  const canMarkAttendance = () => {
+    if (!currentUser) return false;
+    
+    // Admins and Managers can mark attendance for any shift
+    if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+      return true;
+    }
+    
+    // Employees can only mark attendance for their own shifts
+    // We need to find the employee record for the current user
+    // This should be passed from the parent component
+    if (currentUser.role === 'Employee') {
+      // For now, allow all employees to mark attendance
+      // The actual permission check is done in the parent component
+      return true;
+    }
+    
+    return false;
   };
 
   return (
@@ -96,7 +142,7 @@ const ShiftCard = ({
       {showActions && (
         <div className="flex items-center justify-between pt-3 border-t border-gray-100">
           <div className="flex items-center gap-2">
-            {shift.status === 'scheduled' && (
+            {shift.status === 'scheduled' && canMarkAttendance() && (
               <button
                 onClick={() => onMarkAttendance && onMarkAttendance(shift.id, 'in-progress')}
                 className="px-3 py-1 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600 transition"
@@ -104,7 +150,7 @@ const ShiftCard = ({
                 Start Shift
               </button>
             )}
-            {shift.status === 'in-progress' && (
+            {shift.status === 'in-progress' && canMarkAttendance() && (
               <button
                 onClick={() => onMarkAttendance && onMarkAttendance(shift.id, 'completed')}
                 className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition"
@@ -114,7 +160,7 @@ const ShiftCard = ({
             )}
           </div>
           
-          {isEditable && (
+          {canEditShift() && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onEdit && onEdit(shift)}
