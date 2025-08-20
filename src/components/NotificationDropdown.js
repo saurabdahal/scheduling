@@ -229,6 +229,69 @@ const NotificationDropdown = ({
                      <p className="text-sm text-gray-600 leading-relaxed line-clamp-2 mb-2">
                        {notification.message}
                      </p>
+                     
+                     {/* Action Metadata Display */}
+                     {notification.metadata && (
+                       <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                         {notification.metadata.actionType === 'approved' && (
+                           <div className="text-xs text-gray-600">
+                             <span className="font-semibold text-green-600">✓ Approved by:</span> {notification.metadata.approvedBy}
+                             {notification.metadata.approvedAt && (
+                               <span className="ml-2 text-gray-500">
+                                 on {format(new Date(notification.metadata.approvedAt), 'MMM dd, HH:mm')}
+                               </span>
+                             )}
+                           </div>
+                         )}
+                         {notification.metadata.actionType === 'rejected' && (
+                           <div className="text-xs text-gray-600">
+                             <span className="font-semibold text-red-600">✗ Rejected by:</span> {notification.metadata.rejectedBy}
+                             {notification.metadata.rejectedAt && (
+                               <span className="ml-2 text-gray-500">
+                                 on {format(new Date(notification.metadata.rejectedAt), 'MMM dd, HH:mm')}
+                               </span>
+                             )}
+                           </div>
+                         )}
+                         {notification.metadata.actionType === 'created' && (
+                           <div className="text-xs text-gray-600">
+                             <span className="font-semibold text-blue-600">➕ Created by:</span> {notification.metadata.createdBy}
+                             {notification.metadata.createdAt && (
+                               <span className="ml-2 text-gray-500">
+                                 on {format(new Date(notification.metadata.createdAt), 'MMM dd, HH:mm')}
+                               </span>
+                             )}
+                           </div>
+                         )}
+                         {notification.metadata.actionType === 'updated' && (
+                           <div className="text-xs text-gray-600">
+                             <span className="font-semibold text-yellow-600">✏️ Updated by:</span> {notification.metadata.updatedBy}
+                             {notification.metadata.updatedAt && (
+                               <span className="ml-2 text-gray-500">
+                                 on {format(new Date(notification.metadata.updatedAt), 'MMM dd, HH:mm')}
+                               </span>
+                             )}
+                           </div>
+                         )}
+                         {notification.metadata.actionType === 'deleted' && (
+                           <div className="text-xs text-gray-600">
+                             <span className="font-semibold text-red-600">🗑️ Deleted by:</span> {notification.metadata.deletedBy}
+                             {notification.metadata.deletedAt && (
+                               <span className="ml-2 text-gray-500">
+                                 on {format(new Date(notification.metadata.deletedAt), 'MMM dd, HH:mm')}
+                               </span>
+                             )}
+                           </div>
+                         )}
+                         
+                         {/* Request/Shift Details */}
+                         {(notification.metadata.requestDetails || notification.metadata.shiftDetails) && (
+                           <div className="mt-2 text-xs text-gray-500 bg-white px-2 py-1 rounded border">
+                             {notification.metadata.requestDetails || notification.metadata.shiftDetails}
+                           </div>
+                         )}
+                       </div>
+                     )}
                                          <div className="flex items-center gap-4 mt-4">
                                              <span className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full font-semibold border border-gray-200">
                          {notification.type?.replace('_', ' ').toUpperCase() || 'INFO'}

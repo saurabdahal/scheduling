@@ -258,7 +258,9 @@ export function linkUsersToEmployees(users, employees) {
  * @returns {string} - Employee name or "Unknown Employee" if not found
  */
 export function getEmployeeNameByUserId(userId, users, employees) {
-  if (!userId || !users || !employees) return "Unknown Employee";
+  if (!userId || !users || !employees) {
+    return "Unknown Employee";
+  }
   
   // First try to find employee directly by userId
   let employee = employees.find(emp => emp.userId === userId);
@@ -266,6 +268,7 @@ export function getEmployeeNameByUserId(userId, users, employees) {
   // If not found, try to find by linking through email
   if (!employee) {
     const user = users.find(u => u.id === userId);
+    
     if (user && user.email) {
       employee = employees.find(emp => emp.email === user.email);
     }

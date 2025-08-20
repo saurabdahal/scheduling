@@ -12,6 +12,15 @@ import notificationService from '../services/NotificationService.js';
 const Shifts = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
   
+  // Get display name for user (full name from employee record or fallback to username)
+  const getDisplayName = () => {
+    if (user?.email && employees.length > 0) {
+      const employee = employees.find(emp => emp.email === user.email || emp.userId === user.id || emp.id === user.id);
+      if (employee) return employee.name;
+    }
+    return user?.username || user?.email || 'Unknown User';
+  };
+  
   const [currentDate, setCurrentDate] = useState(new Date());
 
 
@@ -223,42 +232,36 @@ const Shifts = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
       await dataService.saveShift(newShift);
       onUpdateShifts([...shifts, newShift]);
       
-      // Create notification for the employee about their new shift
-      try {
-        // Find the user ID for the employee by matching email
-        const users = await dataService.getAll('users');
-        const employeeUser = users.find(u => u.email === selectedEmployee.email);
-        
-        if (employeeUser) {
-                     const shiftNotification = new Notification({
-             type: 'info',
-             title: 'New Shift Assigned',
-             message: `You have been assigned a new shift on ${format(parseISO(newShift.date), 'MMM dd, yyyy')} from ${newShift.startTime} to ${newShift.endTime}`,
-             userId: employeeUser.id,
-             recipientRole: 'Employee',
-             category: 'shift',
-             priority: 'normal',
-             actionUrl: '/shifts',
-             actionText: 'View My Schedule'
-           });
-          
-                    console.log('Creating shift notification for employee:', shiftNotification);
-          await notificationService.createNotification(shiftNotification);
-          
-          // Also create a notification for managers to see
-          const managerNotification = new Notification({
-             type: 'success',
-             title: 'Shift Created',
-             message: `New shift created for ${selectedEmployee.name} on ${format(parseISO(newShift.date), 'MMM dd, yyyy')}`,
-             recipientRole: 'Manager',
-             category: 'shift',
-             priority: 'normal',
-             actionUrl: '/shifts',
-             actionText: 'View Schedule'
-           });
-          
-          await notificationService.createNotification(managerNotification);
-        }
+               // Create notification for the employee about their new shift
+         try {
+           // Find the user ID for the employee by matching email
+           const users = await dataService.getAll('users');
+           const employeeUser = users.find(u => u.email === selectedEmployee.email);
+           
+           if (employeeUser) {
+             const shiftNotification = new Notification({
+               type: 'info',
+               title: 'New Shift Assigned',
+               message: `You have been assigned a new shift on ${format(parseISO(newShift.date), 'MMM dd, yyyy')} from ${newShift.startTime} to ${newShift.endTime}`,
+               userId: employeeUser.id,
+               recipientRole: 'Employee', // Role-based for employee
+               recipientId: employeeUser.id, // Specific employee user ID
+               createdBy: getDisplayName(), // Manager created this notification for employee
+               category: 'shift',
+               priority: 'normal',
+               actionUrl: '/shifts',
+               actionText: 'View My Schedule',
+               metadata: {
+                 actionType: 'created',
+                 createdBy: getDisplayName(),
+                 createdAt: new Date().toISOString(),
+                 shiftDetails: `Date: ${format(parseISO(newShift.date), 'MMM dd, yyyy')} • Time: ${newShift.startTime} - ${newShift.endTime} • Role: ${newShift.role}`
+               }
+             });
+           
+             console.log('Creating shift notification for employee:', shiftNotification);
+             await notificationService.createNotification(shiftNotification);
+           }
       } catch (notificationError) {
         console.error('Error creating shift notification:', notificationError);
         // Don't let notification error break the shift creation
@@ -323,34 +326,28 @@ const Shifts = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
             const employeeUser = users.find(u => u.email === employee?.email);
             
                          if (employeeUser && employee) {
-               const shiftUpdateNotification = new Notification({
-                 type: 'warning',
-                 title: 'Shift Updated',
-                 message: `Your shift on ${format(parseISO(existingShift.date), 'MMM dd, yyyy')} has been updated. New time: ${existingShift.startTime} to ${existingShift.endTime}`,
-                 userId: employeeUser.id,
-                 recipientRole: 'Employee',
-                 category: 'shift',
-                 priority: 'normal',
-                 actionUrl: '/shifts',
-                 actionText: 'View My Schedule'
-               });
+                               const shiftUpdateNotification = new Notification({
+                  type: 'warning',
+                  title: 'Shift Updated',
+                  message: `Your shift on ${format(parseISO(existingShift.date), 'MMM dd, yyyy')} has been updated. New time: ${existingShift.startTime} to ${existingShift.endTime}`,
+                  userId: employeeUser.id,
+                  recipientRole: 'Employee', // Role-based for employee
+                  recipientId: employeeUser.id, // Specific employee user ID
+                  createdBy: getDisplayName(), // Manager created this notification for employee
+                  category: 'shift',
+                  priority: 'normal',
+                  actionUrl: '/shifts',
+                  actionText: 'View My Schedule',
+                  metadata: {
+                    actionType: 'updated',
+                    updatedBy: getDisplayName(),
+                    updatedAt: new Date().toISOString(),
+                    shiftDetails: `Date: ${format(parseISO(existingShift.date), 'MMM dd, yyyy')} • New Time: ${existingShift.startTime} - ${existingShift.endTime}`
+                  }
+                });
                
-               await notificationService.createNotification(shiftUpdateNotification);
-               
-               // Also notify managers
-               const managerUpdateNotification = new Notification({
-                 type: 'info',
-                 title: 'Shift Updated',
-                 message: `Shift updated for ${employee.name} on ${format(parseISO(existingShift.date), 'MMM dd, yyyy')}`,
-                 recipientRole: 'Manager',
-                 category: 'shift',
-                 priority: 'normal',
-                 actionUrl: '/shifts',
-                 actionText: 'View Schedule'
-               });
-               
-               await notificationService.createNotification(managerUpdateNotification);
-             }
+                               await notificationService.createNotification(shiftUpdateNotification);
+              }
           }
         } catch (notificationError) {
 
@@ -394,34 +391,28 @@ const Shifts = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
             const employeeUser = users.find(u => u.email === employee?.email);
             
                          if (employeeUser && employee) {
-                               const shiftCancelNotification = new Notification({
+                                                               const shiftCancelNotification = new Notification({
                   type: 'error',
                   title: 'Shift Cancelled',
                   message: `Your shift on ${format(parseISO(shiftToDelete.date), 'MMM dd, yyyy')} from ${shiftToDelete.startTime} to ${shiftToDelete.endTime} has been cancelled`,
                   userId: employeeUser.id,
-                  recipientRole: 'Employee',
+                  recipientRole: 'Employee', // Role-based for employee
+                  recipientId: employeeUser.id, // Specific employee user ID
+                  createdBy: getDisplayName(), // Manager created this notification for employee
                   category: 'shift',
                   priority: 'high',
                   actionUrl: '/shifts',
-                  actionText: 'View My Schedule'
+                  actionText: 'View My Schedule',
+                  metadata: {
+                    actionType: 'deleted',
+                    deletedBy: getDisplayName(),
+                    deletedAt: new Date().toISOString(),
+                    shiftDetails: `Date: ${format(parseISO(shiftToDelete.date), 'MMM dd, yyyy')} • Time: ${shiftToDelete.startTime} - ${shiftToDelete.endTime} • Role: ${shiftToDelete.role}`
+                  }
                 });
                
-               await notificationService.createNotification(shiftCancelNotification);
-               
-                               // Also notify managers
-                const managerCancelNotification = new Notification({
-                  type: 'warning',
-                  title: 'Shift Cancelled',
-                  message: `Shift cancelled for ${employee.name} on ${format(parseISO(shiftToDelete.date), 'MMM dd, yyyy')}`,
-                  recipientRole: 'Manager',
-                  category: 'shift',
-                  priority: 'high',
-                  actionUrl: '/shifts',
-                  actionText: 'View Schedule'
-                });
-               
-               await notificationService.createNotification(managerCancelNotification);
-             }
+                               await notificationService.createNotification(shiftCancelNotification);
+              }
           } catch (notificationError) {
 
             // Don't let notification error break the shift deletion

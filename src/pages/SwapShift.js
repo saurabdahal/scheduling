@@ -19,6 +19,27 @@ const SwapShift = ({
 }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
 
+  // Get display name for user (full name from employee record or fallback to username)
+  const getDisplayName = () => {
+    if (user?.email && employees.length > 0) {
+      // First try to get employee name by user ID
+      let employeeName = getEmployeeNameByUserId(user.id, users, employees);
+      
+      if (employeeName && employeeName !== 'Unknown Employee') {
+        return employeeName;
+      }
+      
+      // If that fails, try to find by email directly
+      const employee = employees.find(emp => emp.email === user.email);
+      
+      if (employee && employee.name) {
+        return employee.name;
+      }
+    }
+    
+    return user?.username || user?.email || 'Unknown User';
+  };
+
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showTimeOffModal, setShowTimeOffModal] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -35,6 +56,8 @@ const SwapShift = ({
     endDate: '',
     reason: ''
   });
+
+
 
   const getStatusColor = (status) => {
     const colors = {
@@ -84,34 +107,39 @@ const SwapShift = ({
         const currentEmployee = employees.find(emp => emp.id === user.id || emp.email === user.email);
         
         if (currentEmployee) {
-          // Create notification for the employee (confirmation)
-          const employeeNotification = new Notification({
-            type: 'info',
-            title: 'Swap Request Submitted',
-            message: `Your shift swap request for ${format(parseISO(shift.date), 'MMM dd, yyyy')} has been submitted and is pending approval`,
-            userId: user.id,
-            recipientRole: 'Employee',
-            category: 'swap',
-            priority: 'normal',
-            actionUrl: '/swap-shift',
-            actionText: 'View Request'
-          });
+                                // NO notification for employee when they submit request
+           // Only managers get notified about new requests
           
-          await notificationService.createNotification(employeeNotification);
+          // Find managers to notify
+          const managers = employees.filter(emp => emp.role === 'Manager' || emp.role === 'Admin');
           
-          // Create notification for managers/admins
-          const managerNotification = new Notification({
-            type: 'warning',
-            title: 'New Swap Request',
-            message: `${currentEmployee.name} has requested a shift swap for ${format(parseISO(shift.date), 'MMM dd, yyyy')}`,
-            recipientRole: 'Manager',
-            category: 'swap',
-            priority: 'normal',
-            actionUrl: '/swap-shift',
-            actionText: 'Review Request'
-          });
-          
-          await notificationService.createNotification(managerNotification);
+                     // Create notification for each manager
+           for (const manager of managers) {
+             // Find the user ID for the manager by matching email
+             const managerUser = users.find(u => u.email === manager.email);
+             if (managerUser) {
+               const managerNotification = new Notification({
+                 type: 'warning',
+                 title: 'New Swap Request',
+                 message: `${currentEmployee.name} has requested a shift swap for ${format(parseISO(shift.date), 'MMM dd, yyyy')}`,
+                 recipientRole: 'Manager', // Role-based for managers
+                 recipientId: managerUser.id, // Specific manager user ID
+                 createdBy: currentEmployee.name, // Employee created this notification for managers
+                 category: 'swap',
+                 priority: 'normal',
+                 actionUrl: '/swap-shift',
+                 actionText: 'Review Request',
+                 metadata: {
+                   actionType: 'created',
+                   createdBy: currentEmployee.name,
+                   createdAt: new Date().toISOString(),
+                   requestDetails: `Shift swap request for ${format(parseISO(shift.date), 'MMM dd, yyyy')}`
+                 }
+               });
+               
+               await notificationService.createNotification(managerNotification);
+             }
+           }
         }
       } catch (notificationError) {
         console.error('Error creating swap request notifications:', notificationError);
@@ -158,34 +186,39 @@ const SwapShift = ({
         const currentEmployee = employees.find(emp => emp.id === user.id || emp.email === user.email);
         
         if (currentEmployee) {
-          // Create notification for the employee (confirmation)
-          const employeeNotification = new Notification({
-            type: 'info',
-            title: 'Time-Off Request Submitted',
-            message: `Your time-off request from ${format(parseISO(timeOffForm.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffForm.endDate), 'MMM dd, yyyy')} has been submitted and is pending approval`,
-            userId: user.id,
-            recipientRole: 'Employee',
-            category: 'timeoff',
-            priority: 'normal',
-            actionUrl: '/swap-shift',
-            actionText: 'View Request'
-          });
+                    // NO notification for employee when they submit request
+          // Only managers get notified about new requests
           
-          await notificationService.createNotification(employeeNotification);
+          // Find managers to notify
+          const managers = employees.filter(emp => emp.role === 'Manager' || emp.role === 'Admin');
           
-          // Create notification for managers/admins
-          const managerNotification = new Notification({
-            type: 'warning',
-            title: 'New Time-Off Request',
-            message: `${currentEmployee.name} has requested time off from ${format(parseISO(timeOffForm.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffForm.endDate), 'MMM dd, yyyy')}`,
-            recipientRole: 'Manager',
-            category: 'timeoff',
-            priority: 'normal',
-            actionUrl: '/swap-shift',
-            actionText: 'Review Request'
-          });
-          
-          await notificationService.createNotification(managerNotification);
+                     // Create notification for each manager
+           for (const manager of managers) {
+             // Find the user ID for the manager by matching email
+             const managerUser = users.find(u => u.email === manager.email);
+             if (managerUser) {
+               const managerNotification = new Notification({
+                 type: 'warning',
+                 title: 'New Time-Off Request',
+                 message: `${currentEmployee.name} has requested time off from ${format(parseISO(timeOffForm.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffForm.endDate), 'MMM dd, yyyy')}`,
+                 recipientRole: 'Manager', // Role-based for managers
+                 recipientId: managerUser.id, // Specific manager user ID
+                 createdBy: currentEmployee.name, // Employee created this notification for managers
+                 category: 'timeoff',
+                 priority: 'normal',
+                 actionUrl: '/swap-shift',
+                 actionText: 'Review Request',
+                 metadata: {
+                   actionType: 'created',
+                   createdBy: currentEmployee.name,
+                   createdAt: new Date().toISOString(),
+                   requestDetails: `Time off request from ${format(parseISO(timeOffForm.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffForm.endDate), 'MMM dd, yyyy')}`
+                 }
+               });
+               
+               await notificationService.createNotification(managerNotification);
+             }
+           }
         }
       } catch (notificationError) {
         console.error('Error creating time-off request notifications:', notificationError);
@@ -204,17 +237,25 @@ const SwapShift = ({
         // Find the swap request to get employee info
         const swapRequest = swapRequests.find(req => req.id === requestId);
         if (swapRequest) {
-          // Create notification for the employee
+          // Create notification for the employee ONLY
           const employeeNotification = new Notification({
             type: 'success',
             title: 'Swap Request Approved',
             message: `Your shift swap request for ${format(parseISO(swapRequest.shiftDate), 'MMM dd, yyyy')} has been approved`,
             userId: swapRequest.requesterId,
-            recipientRole: 'Employee',
+            recipientRole: 'Employee', // Role-based for employee
+            recipientId: swapRequest.requesterId, // Specific employee user ID
+            createdBy: getDisplayName(), // Manager created this notification for employee
             category: 'swap',
             priority: 'normal',
             actionUrl: '/swap-shift',
-            actionText: 'View Request'
+            actionText: 'View Request',
+            metadata: {
+              actionType: 'approved',
+              approvedBy: getDisplayName(),
+              approvedAt: new Date().toISOString(),
+              requestDetails: `Date: ${format(parseISO(swapRequest.shiftDate), 'MMM dd, yyyy')} • Reason: ${swapRequest.reason}`
+            }
           });
           
           await notificationService.createNotification(employeeNotification);
@@ -225,17 +266,25 @@ const SwapShift = ({
         // Find the time-off request to get employee info
         const timeOffRequest = timeOffRequests.find(req => req.id === requestId);
         if (timeOffRequest) {
-          // Create notification for the employee
+          // Create notification for the employee ONLY
           const employeeNotification = new Notification({
             type: 'success',
             title: 'Time-Off Request Approved',
             message: `Your time-off request from ${format(parseISO(timeOffRequest.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffRequest.endDate), 'MMM dd, yyyy')} has been approved`,
             userId: timeOffRequest.employeeId,
-            recipientRole: 'Employee',
+            recipientRole: 'Employee', // Role-based for employee
+            recipientId: timeOffRequest.employeeId, // Specific employee user ID
+            createdBy: getDisplayName(), // Manager created this notification for employee
             category: 'timeoff',
             priority: 'normal',
             actionUrl: '/swap-shift',
-            actionText: 'View Request'
+            actionText: 'View Request',
+            metadata: {
+              actionType: 'approved',
+              approvedBy: getDisplayName(),
+              approvedAt: new Date().toISOString(),
+              requestDetails: `Period: ${format(parseISO(timeOffRequest.startDate), 'MMM dd')} - ${format(parseISO(timeOffRequest.endDate), 'MMM dd, yyyy')} • Reason: ${timeOffRequest.reason}`
+            }
           });
           
           await notificationService.createNotification(employeeNotification);
@@ -261,11 +310,19 @@ const SwapShift = ({
             title: 'Swap Request Rejected',
             message: `Your shift swap request for ${format(parseISO(swapRequest.shiftDate), 'MMM dd, yyyy')} has been rejected`,
             userId: swapRequest.requesterId,
-            recipientRole: 'Employee',
+            recipientRole: 'Employee', // Role-based for employee
+            recipientId: swapRequest.requesterId, // Specific employee user ID
+            createdBy: getDisplayName(), // Manager created this notification for employee
             category: 'swap',
             priority: 'normal',
             actionUrl: '/swap-shift',
-            actionText: 'View Request'
+            actionText: 'View Request',
+            metadata: {
+              actionType: 'rejected',
+              rejectedBy: getDisplayName(),
+              rejectedAt: new Date().toISOString(),
+              requestDetails: `Date: ${format(parseISO(swapRequest.shiftDate), 'MMM dd, yyyy')} • Reason: ${swapRequest.reason}`
+            }
           });
           
           await notificationService.createNotification(employeeNotification);
@@ -282,11 +339,19 @@ const SwapShift = ({
             title: 'Time-Off Request Rejected',
             message: `Your time-off request from ${format(parseISO(timeOffRequest.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffRequest.endDate), 'MMM dd, yyyy')} has been rejected`,
             userId: timeOffRequest.employeeId,
-            recipientRole: 'Employee',
+            recipientRole: 'Employee', // Role-based for employee
+            recipientId: timeOffRequest.employeeId, // Specific employee user ID
+            createdBy: getDisplayName(), // Manager created this notification for employee
             category: 'timeoff',
             priority: 'normal',
             actionUrl: '/swap-shift',
-            actionText: 'View Request'
+            actionText: 'View Request',
+            metadata: {
+              actionType: 'rejected',
+              rejectedBy: getDisplayName(),
+              rejectedAt: new Date().toISOString(),
+              requestDetails: `Period: ${format(parseISO(timeOffRequest.startDate), 'MMM dd')} - ${format(parseISO(timeOffRequest.endDate), 'MMM dd, yyyy')} • Reason: ${timeOffRequest.reason}`
+            }
           });
           
           await notificationService.createNotification(employeeNotification);
@@ -539,42 +604,44 @@ const SwapShift = ({
         </div>
       </div>
 
-      {/* Upcoming Shifts */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            {isAdminOrManager ? 'Upcoming Shifts' : 'My Upcoming Shifts'}
-          </h2>
-        </div>
-        <div className="p-6">
-          {visibleUpcomingShifts.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">No upcoming shifts</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibleUpcomingShifts.map(shift => {
-                return (
-                  <div key={shift.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-medium text-gray-900">{shift.employeeName || 'Unknown Employee'}</h3>
-                        <p className="text-sm text-gray-600">
-                          {format(parseISO(shift.date), 'MMM dd, yyyy')}
-                        </p>
-                        <p className="text-sm text-gray-600">{shift.startTime} - {shift.endTime}</p>
-                        <span className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full mt-2">
-                          {shift.role}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+             {/* Upcoming Shifts */}
+       <div className="bg-white rounded-lg shadow">
+         <div className="px-6 py-4 border-b border-gray-200">
+           <h2 className="text-lg font-semibold text-gray-900">
+             {isAdminOrManager ? 'Upcoming Shifts' : 'My Upcoming Shifts'}
+           </h2>
+         </div>
+         <div className="p-6">
+           {visibleUpcomingShifts.length === 0 ? (
+             <div className="text-center py-8">
+               <p className="text-gray-500">No upcoming shifts</p>
+             </div>
+           ) : (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+               {visibleUpcomingShifts.map(shift => {
+                 return (
+                   <div key={shift.id} className="border border-gray-200 rounded-lg p-4">
+                     <div className="flex justify-between items-start">
+                       <div>
+                         <h3 className="font-medium text-gray-900">{shift.employeeName || 'Unknown Employee'}</h3>
+                         <p className="text-sm text-gray-600">
+                           {format(parseISO(shift.date), 'MMM dd, yyyy')}
+                         </p>
+                         <p className="text-sm text-gray-600">{shift.startTime} - {shift.endTime}</p>
+                         <span className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full mt-2">
+                           {shift.role}
+                         </span>
+                       </div>
+                     </div>
+                   </div>
+                 );
+               })}
+             </div>
+           )}
+         </div>
+       </div>
+
+
 
       {/* Swap Request Modal */}
       {showSwapModal && (

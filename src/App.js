@@ -147,7 +147,13 @@ function App() {
         setTimeOffRequests(finalTimeOffRequestsAsModels);
         setPayrollRecords(finalPayrollRecordsAsModels);
         setDepartments(loadedDepartments || []);
-        setNotifications(loadedNotifications || []);
+        // Sort notifications by createdAt in descending order (newest first)
+        const sortedNotifications = (loadedNotifications || []).sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0);
+          const dateB = new Date(b.createdAt || 0);
+          return dateB - dateA;
+        });
+        setNotifications(sortedNotifications);
         
         // Save the fixed data back to files to permanently resolve "Unknown Employee" issue
         try {
@@ -193,9 +199,16 @@ function App() {
           latest: latestNotifications.slice(0, 2) // Log first 2 for debugging
         });
         
+        // Sort notifications by createdAt in descending order (newest first)
+        const sortedNotifications = latestNotifications.sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0);
+          const dateB = new Date(b.createdAt || 0);
+          return dateB - dateA;
+        });
+        
         // Only update if there are actually new notifications to prevent unnecessary re-renders
         if (latestNotifications.length !== notifications.length) {
-          setNotifications(latestNotifications);
+          setNotifications(sortedNotifications);
         }
       } catch (error) {
         console.error('Error refreshing notifications:', error);
@@ -429,16 +442,46 @@ function App() {
       const savedRequest = await dataService.saveSwapRequest(request);
       setSwapRequests([...swapRequests, savedRequest]);
       
-      // Create notification for managers
-      const notification = new Notification({
-        type: 'swap_request',
-        title: 'New Swap Request',
-        message: `${request.requesterName} requested a shift swap`,
-        priority: 'medium',
-        recipientRole: 'Manager'
-      });
-      await dataService.saveNotification(notification);
-      setNotifications([...notifications, notification]);
+      // Find managers to notify
+      const managers = employees.filter(emp => emp.role === 'Manager' || emp.role === 'Admin');
+      
+      // Create notification for each manager
+      for (const manager of managers) {
+        // Find the user ID for the manager by matching email
+        const managerUser = users.find(u => u.email === manager.email);
+        
+        if (managerUser) {
+          const notification = new Notification({
+            type: 'swap_request',
+            title: 'New Swap Request',
+            message: `${request.requesterName} requested a shift swap`,
+            priority: 'medium',
+            userId: managerUser.id, // Set userId for the recipient
+            recipientRole: 'Manager', // Role-based for managers
+            recipientId: managerUser.id, // Specific manager user ID
+            createdBy: request.requesterName,
+            category: 'swap', // Set proper category
+            actionUrl: '/swap-shift', // Set proper action URL
+            actionText: 'Review Request', // Set proper action text
+            metadata: {
+              actionType: 'created',
+              createdBy: request.requesterName,
+              createdAt: new Date().toISOString(),
+              requestDetails: `Shift swap request by ${request.requesterName}`
+            }
+          });
+          
+          await dataService.saveNotification(notification);
+          
+          // Add new notification and maintain sorting by recent first
+          const updatedNotifications = [...notifications, notification].sort((a, b) => {
+            const dateA = new Date(a.createdAt || 0);
+            const dateB = new Date(b.createdAt || 0);
+            return dateB - dateA;
+          });
+          setNotifications(updatedNotifications);
+        }
+      }
       
       return savedRequest;
     } catch (error) {
@@ -460,16 +503,46 @@ function App() {
       const savedRequest = await dataService.saveTimeOffRequest(request);
       setTimeOffRequests([...timeOffRequests, savedRequest]);
       
-      // Create notification for managers
-      const notification = new Notification({
-        type: 'time_off_request',
-        title: 'New Time Off Request',
-        message: `${request.employeeName} requested time off`,
-        priority: 'medium',
-        recipientRole: 'Manager'
-      });
-      await dataService.saveNotification(notification);
-      setNotifications([...notifications, notification]);
+      // Find managers to notify
+      const managers = employees.filter(emp => emp.role === 'Manager' || emp.role === 'Admin');
+      
+      // Create notification for each manager
+      for (const manager of managers) {
+        // Find the user ID for the manager by matching email
+        const managerUser = users.find(u => u.email === manager.email);
+        
+        if (managerUser) {
+          const notification = new Notification({
+            type: 'time_off_request',
+            title: 'New Time Off Request',
+            message: `${request.employeeName} requested time off`,
+            priority: 'medium',
+            userId: managerUser.id, // Set userId for the recipient
+            recipientRole: 'Manager', // Role-based for managers
+            recipientId: managerUser.id, // Specific manager user ID
+            createdBy: request.employeeName,
+            category: 'timeoff', // Set proper category
+            actionUrl: '/swap-shift', // Set proper action URL
+            actionText: 'Review Request', // Set proper action text
+            metadata: {
+              actionType: 'created',
+              createdBy: request.employeeName,
+              createdAt: new Date().toISOString(),
+              requestDetails: `Time off request by ${request.employeeName}`
+            }
+          });
+          
+          await dataService.saveNotification(notification);
+          
+          // Add new notification and maintain sorting by recent first
+          const updatedNotifications = [...notifications, notification].sort((a, b) => {
+            const dateA = new Date(a.createdAt || 0);
+            const dateB = new Date(b.createdAt || 0);
+            return dateB - dateA;
+          });
+          setNotifications(updatedNotifications);
+        }
+      }
       
       return savedRequest;
     } catch (error) {
@@ -499,19 +572,38 @@ function App() {
         await dataService.saveSwapRequest(req);
       }
       
-      // Create notification for employee
-      const request = updatedRequests.find(req => req.id === requestId);
-      if (request) {
-        const notification = new Notification({
-          type: 'swap_response',
-          title: `Swap Request ${status}`,
-          message: `Your swap request has been ${status}`,
-          priority: 'medium',
-          userId: request.requesterId
-        });
-        await dataService.saveNotification(notification);
-        setNotifications([...notifications, notification]);
-      }
+              // Create notification for employee
+        const request = updatedRequests.find(req => req.id === requestId);
+        if (request) {
+          // Find the employee name for the recipient
+          const employee = employees.find(emp => emp.id === request.requesterId);
+          const recipientName = employee ? employee.name : 'Employee';
+          
+          const notification = new Notification({
+            type: 'swap_response',
+            title: `Swap Request ${status}`,
+            message: `Your swap request has been ${status}`,
+            priority: 'medium',
+            userId: request.requesterId,
+            recipientRole: 'Employee', // Role-based for employee
+            recipientId: request.requesterId, // Specific employee user ID
+            createdBy: 'Manager',
+            metadata: {
+              actionType: status === 'approved' ? 'approved' : 'rejected',
+              [status === 'approved' ? 'approvedBy' : 'rejectedBy']: 'Manager',
+              [status === 'approved' ? 'approvedAt' : 'rejectedAt']: new Date().toISOString(),
+              requestDetails: `Swap request ${status} by manager`
+            }
+          });
+          await dataService.saveNotification(notification);
+          // Add new notification and maintain sorting by recent first
+          const updatedNotifications = [...notifications, notification].sort((a, b) => {
+            const dateA = new Date(a.createdAt || 0);
+            const dateB = new Date(b.createdAt || 0);
+            return dateB - dateA;
+          });
+          setNotifications(updatedNotifications);
+        }
     } catch (error) {
       console.error('Error updating swap request status:', error);
     }
@@ -538,19 +630,38 @@ function App() {
         await dataService.saveTimeOffRequest(req);
       }
       
-      // Create notification for employee
-      const request = updatedRequests.find(req => req.id === requestId);
-      if (request) {
-        const notification = new Notification({
-          type: 'time_off_response',
-          title: `Time Off Request ${status}`,
-          message: `Your time off request has been ${status}`,
-          priority: 'medium',
-          userId: request.employeeId
-        });
-        await dataService.saveNotification(notification);
-        setNotifications([...notifications, notification]);
-      }
+              // Create notification for employee
+        const request = updatedRequests.find(req => req.id === requestId);
+        if (request) {
+          // Find the employee name for the recipient
+          const employee = employees.find(emp => emp.id === request.employeeId);
+          const recipientName = employee ? employee.name : 'Employee';
+          
+          const notification = new Notification({
+            type: 'time_off_response',
+            title: `Time Off Request ${status}`,
+            message: `Your time off request has been ${status}`,
+            priority: 'medium',
+            userId: request.employeeId,
+            recipientRole: 'Employee', // Role-based for employee
+            recipientId: request.employeeId, // Specific employee user ID
+            createdBy: 'Manager',
+            metadata: {
+              actionType: status === 'approved' ? 'approved' : 'rejected',
+              [status === 'approved' ? 'approvedBy' : 'rejectedBy']: 'Manager',
+              [status === 'approved' ? 'approvedAt' : 'rejectedAt']: new Date().toISOString(),
+              requestDetails: `Time off request ${status} by manager`
+            }
+          });
+          await dataService.saveNotification(notification);
+          // Add new notification and maintain sorting by recent first
+          const updatedNotifications = [...notifications, notification].sort((a, b) => {
+            const dateA = new Date(a.createdAt || 0);
+            const dateB = new Date(b.createdAt || 0);
+            return dateB - dateA;
+          });
+          setNotifications(updatedNotifications);
+        }
     } catch (error) {
       console.error('Error updating time off request status:', error);
     }

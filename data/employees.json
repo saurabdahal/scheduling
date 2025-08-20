@@ -59,7 +59,7 @@
     "status": "active",
     "hireDate": "2025-08-19",
     "terminationDate": null,
-    "userId": null,
+    "userId": 1755632361470,
     "notes": "",
     "createdAt": "2025-08-19T20:08:16.015Z",
     "updatedAt": "2025-08-19T20:08:16.015Z"
@@ -124,7 +124,7 @@
     "status": "active",
     "hireDate": "2025-08-19",
     "terminationDate": null,
-    "userId": null,
+    "userId": 1755637847213,
     "notes": "",
     "createdAt": "2025-08-19T21:10:47.167Z",
     "updatedAt": "2025-08-19T21:10:47.167Z"
@@ -189,9 +189,269 @@
     "status": "active",
     "hireDate": "2025-08-19",
     "terminationDate": null,
-    "userId": null,
+    "userId": 1755642783257,
     "notes": "",
     "createdAt": "2025-08-19T22:33:03.198Z",
     "updatedAt": "2025-08-19T22:33:03.198Z"
+  },
+  {
+    "id": 1755636660295,
+    "name": "Cheick Maa",
+    "email": "cheick.maa@cambriancollege.ca",
+    "phone": "(555) 456-7890",
+    "emergencyContact": "Emergency Contact",
+    "emergencyPhone": "5551234567",
+    "role": "Employee",
+    "hourlyRate": "15.5",
+    "departments": [
+      "cashier",
+      "barista"
+    ],
+    "availability": {
+      "monday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "tuesday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "wednesday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "thursday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "friday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "saturday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "sunday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      }
+    },
+    "status": "active",
+    "hireDate": "2025-08-19",
+    "terminationDate": null,
+    "userId": 1755636660294,
+    "notes": "",
+    "createdAt": "2025-08-19T20:51:00.293Z",
+    "updatedAt": "2025-08-19T20:51:00.293Z"
+  },
+  {
+    "id": 1755636660296,
+    "name": "Bob Employee",
+    "email": "bob@company.com",
+    "phone": "(555) 456-7890",
+    "emergencyContact": "Emergency Contact",
+    "emergencyPhone": "5551234567",
+    "role": "Employee",
+    "hourlyRate": "15.5",
+    "departments": [
+      "cashier",
+      "barista"
+    ],
+    "availability": {
+      "monday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "tuesday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "wednesday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "thursday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "friday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "saturday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "sunday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      }
+    },
+    "status": "active",
+    "hireDate": "2025-08-16",
+    "terminationDate": null,
+    "userId": 3,
+    "notes": "",
+    "createdAt": "2025-08-16T00:39:32.279Z",
+    "updatedAt": "2025-08-16T00:39:32.279Z"
+  },
+  {
+    "id": 1755659948677,
+    "name": "John Doe",
+    "email": "manager@company.com",
+    "phone": "(555) 123-4567",
+    "emergencyContact": "Emergency Contact",
+    "emergencyPhone": "5551234567",
+    "role": "Manager",
+    "hourlyRate": "25.0",
+    "departments": [
+      "management",
+      "operations"
+    ],
+    "availability": {
+      "monday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "tuesday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "wednesday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "thursday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "friday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "saturday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "sunday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      }
+    },
+    "status": "active",
+    "hireDate": "2025-08-16",
+    "terminationDate": null,
+    "userId": 2,
+    "notes": "Senior Manager",
+    "createdAt": "2025-08-16T00:39:32.279Z",
+    "updatedAt": "2025-08-16T00:39:32.279Z"
+  },
+  {
+    "id": 1755659948678,
+    "name": "Admin User",
+    "email": "admin@company.com",
+    "phone": "(555) 000-0000",
+    "emergencyContact": "Emergency Contact",
+    "emergencyPhone": "5550000000",
+    "role": "Admin",
+    "hourlyRate": "30.0",
+    "departments": [
+      "management",
+      "administration"
+    ],
+    "availability": {
+      "monday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "tuesday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "wednesday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "thursday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "friday": {
+        "available": true,
+        "startTime": "08:00",
+        "endTime": "18:00",
+        "notes": ""
+      },
+      "saturday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "sunday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      }
+    },
+    "status": "active",
+    "hireDate": "2025-08-16",
+    "terminationDate": null,
+    "userId": 1,
+    "notes": "System Administrator",
+    "createdAt": "2025-08-16T00:39:32.278Z",
+    "updatedAt": "2025-08-16T00:39:32.278Z"
   }
 ]

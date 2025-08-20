@@ -10,6 +10,7 @@ export class Notification {
     this.message = data.message || '';
     this.userId = data.userId || null; // Target user for the notification
     this.recipientRole = data.recipientRole || null; // Target role for the notification
+    this.createdBy = data.createdBy || null; // User who created this notification
     this.isRead = data.isRead !== undefined ? data.isRead : false;
     this.isDismissed = data.isDismissed !== undefined ? data.isDismissed : false;
     this.priority = data.priority || 'normal'; // low, normal, high, urgent
@@ -149,6 +150,8 @@ export class Notification {
       message: this.message,
       userId: this.userId,
       recipientRole: this.recipientRole,
+      recipientId: this.recipientId,
+      createdBy: this.createdBy,
       isRead: this.isRead,
       isDismissed: this.isDismissed,
       priority: this.priority,
@@ -169,7 +172,7 @@ export class Notification {
   }
 
   // Static methods for creating common notifications
-  static createShiftConflict(employeeName, date, time) {
+  static createShiftConflict(employeeName, date, time, createdBy = 'System') {
     return new Notification({
       type: 'warning',
       title: 'Shift Conflict Detected',
@@ -177,11 +180,18 @@ export class Notification {
       category: 'shift',
       priority: 'high',
       actionUrl: '/shifts',
-      actionText: 'View Shifts'
+      actionText: 'View Shifts',
+      createdBy: createdBy,
+      metadata: {
+        actionType: 'created',
+        createdBy: createdBy,
+        createdAt: new Date().toISOString(),
+        conflictDetails: `Shift conflict for ${employeeName} on ${date} at ${time}`
+      }
     });
   }
 
-  static createTimeOffRequest(employeeName, startDate, endDate) {
+  static createTimeOffRequest(employeeName, startDate, endDate, createdBy = 'System') {
     return new Notification({
       type: 'info',
       title: 'Time Off Request',
@@ -189,11 +199,18 @@ export class Notification {
       category: 'timeoff',
       priority: 'normal',
       actionUrl: '/swap-shift',
-      actionText: 'Review Request'
+      actionText: 'Review Request',
+      createdBy: createdBy,
+      metadata: {
+        actionType: 'created',
+        createdBy: createdBy,
+        createdAt: new Date().toISOString(),
+        requestDetails: `Time off request from ${startDate} to ${endDate}`
+      }
     });
   }
 
-  static createSwapRequest(employeeName, shiftDate) {
+  static createSwapRequest(employeeName, shiftDate, createdBy = 'System') {
     return new Notification({
       type: 'info',
       title: 'Shift Swap Request',
@@ -201,11 +218,18 @@ export class Notification {
       category: 'swap',
       priority: 'normal',
       actionUrl: '/swap-shift',
-      actionText: 'Review Request'
+      actionText: 'Review Request',
+      createdBy: createdBy,
+      metadata: {
+        actionType: 'created',
+        createdBy: createdBy,
+        createdAt: new Date().toISOString(),
+        requestDetails: `Shift swap request for ${shiftDate}`
+      }
     });
   }
 
-  static createPayrollReady(employeeName, payPeriod) {
+  static createPayrollReady(employeeName, payPeriod, createdBy = 'System') {
     return new Notification({
       type: 'success',
       title: 'Payroll Ready',
@@ -213,7 +237,14 @@ export class Notification {
       category: 'payroll',
       priority: 'normal',
       actionUrl: '/payroll',
-      actionText: 'View Payroll'
+      actionText: 'View Payroll',
+      createdBy: createdBy,
+      metadata: {
+        actionType: 'created',
+        createdBy: createdBy,
+        createdAt: new Date().toISOString(),
+        payrollDetails: `Payroll ready for ${employeeName} - ${payPeriod}`
+      }
     });
   }
 

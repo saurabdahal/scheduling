@@ -63,7 +63,7 @@ const TopBar = ({ onLogout, user, notifications = [], onNotificationsUpdate, emp
     return user?.username || 'Unknown User';
   };
   
-  // Filter notifications for current user (both read and unread)
+  // Filter notifications for current user (both read and unread) and sort by recent first
   const userNotifications = useMemo(() => {
     if (!notifications || notifications.length === 0 || !user) return [];
     
@@ -74,7 +74,7 @@ const TopBar = ({ onLogout, user, notifications = [], onNotificationsUpdate, emp
       notifications: notifications.slice(0, 3) // Log first 3 for debugging
     });
     
-    return notifications.filter(notification => {
+    const filteredNotifications = notifications.filter(notification => {
       // Skip invalid notifications
       if (!notification.id) {
         console.log('Skipping notification without ID:', notification);
@@ -92,44 +92,64 @@ const TopBar = ({ onLogout, user, notifications = [], onNotificationsUpdate, emp
         userRole: user.role
       });
       
-      // 1. Direct user notifications (userId or recipientId matches)
-      const isDirectUserNotification = 
-        notification.userId === user.id || 
-        notification.recipientId === user.id;
+      // Get current user's display name for comparison
+      const currentUserDisplayName = getDisplayName();
       
-      // 2. Role-based notifications (for Admin/Manager)
+      // 1. Direct user notifications (userId or recipientId matches) - but exclude notifications created by the current user
+      const isDirectUserNotification = 
+        (notification.userId === user.id || notification.recipientId === user.id) &&
+        // Don't show notifications that the current user created themselves
+        notification.createdBy !== currentUserDisplayName;
+      
+      // 2. Role-based notifications - check if recipientRole matches current user's role AND recipientId matches current user
       const isRoleBasedNotification = 
         notification.recipientRole && 
-        notification.recipientRole === user.role;
+        notification.recipientRole === user.role &&
+        notification.recipientId === user.id;
       
-      // 3. General notifications for all users
+      // 3. General notifications for all users (when recipientRole is null/undefined)
       const isGeneralNotification = 
-        notification.recipientType === 'all' || 
-        !notification.recipientRole;
+        !notification.recipientRole || notification.recipientRole === 'all';
       
-      // 4. Admin/Manager specific notifications (show to all admins/managers)
+      // 4. Admin/Manager specific notifications - show to users with matching role AND recipientId
       const isAdminManagerNotification = 
         (user.role === 'Admin' || user.role === 'Manager') &&
-        (notification.recipientRole === 'Admin' || notification.recipientRole === 'Manager');
+        (notification.recipientRole === 'Admin' || notification.recipientRole === 'Manager') &&
+        notification.recipientId === user.id;
+      
+      // 5. Employee notifications - only show to the specific employee who is the recipient
+      const isEmployeeNotification = 
+        notification.recipientRole === 'Employee' && 
+        notification.recipientId === user.id;
+      
+      // 6. Additional safety check: if user is Employee role, they should only see their own notifications
+      const isEmployeeUser = user.role === 'Employee';
+      const isOwnNotification = notification.userId === user.id || notification.recipientId === user.id;
+      
+      // If user is an employee, they can only see their own notifications
+      if (isEmployeeUser && !isOwnNotification) {
+        return false;
+      }
+      
+      // 7. Additional safety check: don't show notifications created by the current user
+      if (notification.createdBy === currentUserDisplayName) {
+        return false;
+      }
       
       const shouldShow = isDirectUserNotification || 
                         isRoleBasedNotification || 
                         isGeneralNotification || 
-                        isAdminManagerNotification;
-      
-      console.log('Notification decision:', {
-        id: notification.id,
-        title: notification.title,
-        shouldShow,
-        reasons: {
-          isDirectUserNotification,
-          isRoleBasedNotification,
-          isGeneralNotification,
-          isAdminManagerNotification
-        }
-      });
+                        isAdminManagerNotification ||
+                        isEmployeeNotification;
       
       return shouldShow;
+    });
+    
+    // Sort by createdAt in descending order (newest first)
+    return filteredNotifications.sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0);
+      const dateB = new Date(b.createdAt || 0);
+      return dateB - dateA;
     });
   }, [notifications, user]);
 
