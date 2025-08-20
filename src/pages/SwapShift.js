@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { format, parseISO, addDays } from 'date-fns';
+import React, { useState } from 'react';
+import { format, parseISO } from 'date-fns';
 import NotificationBanner from '../components/NotificationBanner';
-import { Shift, SwapRequest, TimeOffRequest, User, Notification } from '../models/index.js';
+import { Shift, SwapRequest, TimeOffRequest, Notification } from '../models/index.js';
+import { populateEmployeeNames, getEmployeeNameByUserId } from '../models/utils.js';
+import notificationService from '../services/NotificationService.js';
 
 const SwapShift = ({ 
   user, 
@@ -12,13 +14,13 @@ const SwapShift = ({
   onAddSwapRequest,
   onAddTimeOffRequest,
   onUpdateSwapRequestStatus,
-  onUpdateTimeOffRequestStatus
+  onUpdateTimeOffRequestStatus,
+  users = []
 }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
 
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showTimeOffModal, setShowTimeOffModal] = useState(false);
-  const [selectedShift, setSelectedShift] = useState(null);
   const [notification, setNotification] = useState(null);
   const [employeeSearch, setEmployeeSearch] = useState('');
 
@@ -55,7 +57,7 @@ const SwapShift = ({
     const newRequest = new SwapRequest({
       id: Date.now(),
       requesterId: user.id || 1,
-      requesterName: user.name || employees.find(e => e.id === user.id)?.name || 'Unknown',
+      requesterName: getEmployeeNameByUserId(user.id, users, employees),
       shiftId: parseInt(swapForm.shiftId),
       shiftDate: shift.date,
       shiftTime: `${shift.startTime}-${shift.endTime}`,
@@ -75,6 +77,46 @@ const SwapShift = ({
       setShowSwapModal(false);
       setSwapForm({ shiftId: '', reason: '', preferredSwapWith: '' });
       setNotification({ type: 'success', message: 'Swap request submitted successfully' });
+      
+      // Create notifications for swap request
+      try {
+        // Find the employee record for the current user
+        const currentEmployee = employees.find(emp => emp.id === user.id || emp.email === user.email);
+        
+        if (currentEmployee) {
+          // Create notification for the employee (confirmation)
+          const employeeNotification = new Notification({
+            type: 'info',
+            title: 'Swap Request Submitted',
+            message: `Your shift swap request for ${format(parseISO(shift.date), 'MMM dd, yyyy')} has been submitted and is pending approval`,
+            userId: user.id,
+            recipientRole: 'Employee',
+            category: 'swap',
+            priority: 'normal',
+            actionUrl: '/swap-shift',
+            actionText: 'View Request'
+          });
+          
+          await notificationService.createNotification(employeeNotification);
+          
+          // Create notification for managers/admins
+          const managerNotification = new Notification({
+            type: 'warning',
+            title: 'New Swap Request',
+            message: `${currentEmployee.name} has requested a shift swap for ${format(parseISO(shift.date), 'MMM dd, yyyy')}`,
+            recipientRole: 'Manager',
+            category: 'swap',
+            priority: 'normal',
+            actionUrl: '/swap-shift',
+            actionText: 'Review Request'
+          });
+          
+          await notificationService.createNotification(managerNotification);
+        }
+      } catch (notificationError) {
+        console.error('Error creating swap request notifications:', notificationError);
+        // Don't let notification error break the request submission
+      }
     } catch (error) {
       setNotification({ type: 'error', message: 'Failed to submit swap request' });
     }
@@ -90,7 +132,7 @@ const SwapShift = ({
     const newRequest = new TimeOffRequest({
       id: Date.now(),
       employeeId: user.id || 1,
-      employeeName: user.name || employees.find(e => e.id === user.id)?.name || 'Unknown',
+      employeeName: getEmployeeNameByUserId(user.id, users, employees),
       startDate: timeOffForm.startDate,
       endDate: timeOffForm.endDate,
       reason: timeOffForm.reason,
@@ -109,6 +151,46 @@ const SwapShift = ({
       setShowTimeOffModal(false);
       setTimeOffForm({ startDate: '', endDate: '', reason: '' });
       setNotification({ type: 'success', message: 'Time-off request submitted successfully' });
+      
+      // Create notifications for time-off request
+      try {
+        // Find the employee record for the current user
+        const currentEmployee = employees.find(emp => emp.id === user.id || emp.email === user.email);
+        
+        if (currentEmployee) {
+          // Create notification for the employee (confirmation)
+          const employeeNotification = new Notification({
+            type: 'info',
+            title: 'Time-Off Request Submitted',
+            message: `Your time-off request from ${format(parseISO(timeOffForm.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffForm.endDate), 'MMM dd, yyyy')} has been submitted and is pending approval`,
+            userId: user.id,
+            recipientRole: 'Employee',
+            category: 'timeoff',
+            priority: 'normal',
+            actionUrl: '/swap-shift',
+            actionText: 'View Request'
+          });
+          
+          await notificationService.createNotification(employeeNotification);
+          
+          // Create notification for managers/admins
+          const managerNotification = new Notification({
+            type: 'warning',
+            title: 'New Time-Off Request',
+            message: `${currentEmployee.name} has requested time off from ${format(parseISO(timeOffForm.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffForm.endDate), 'MMM dd, yyyy')}`,
+            recipientRole: 'Manager',
+            category: 'timeoff',
+            priority: 'normal',
+            actionUrl: '/swap-shift',
+            actionText: 'Review Request'
+          });
+          
+          await notificationService.createNotification(managerNotification);
+        }
+      } catch (notificationError) {
+        console.error('Error creating time-off request notifications:', notificationError);
+        // Don't let notification error break the request submission
+      }
     } catch (error) {
       setNotification({ type: 'error', message: 'Failed to submit time off request' });
     }
@@ -118,8 +200,46 @@ const SwapShift = ({
     try {
       if (type === 'swap') {
         await onUpdateSwapRequestStatus(requestId, 'approved', user.id || 'manager');
+        
+        // Find the swap request to get employee info
+        const swapRequest = swapRequests.find(req => req.id === requestId);
+        if (swapRequest) {
+          // Create notification for the employee
+          const employeeNotification = new Notification({
+            type: 'success',
+            title: 'Swap Request Approved',
+            message: `Your shift swap request for ${format(parseISO(swapRequest.shiftDate), 'MMM dd, yyyy')} has been approved`,
+            userId: swapRequest.requesterId,
+            recipientRole: 'Employee',
+            category: 'swap',
+            priority: 'normal',
+            actionUrl: '/swap-shift',
+            actionText: 'View Request'
+          });
+          
+          await notificationService.createNotification(employeeNotification);
+        }
       } else {
         await onUpdateTimeOffRequestStatus(requestId, 'approved', user.id || 'manager');
+        
+        // Find the time-off request to get employee info
+        const timeOffRequest = timeOffRequests.find(req => req.id === requestId);
+        if (timeOffRequest) {
+          // Create notification for the employee
+          const employeeNotification = new Notification({
+            type: 'success',
+            title: 'Time-Off Request Approved',
+            message: `Your time-off request from ${format(parseISO(timeOffRequest.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffRequest.endDate), 'MMM dd, yyyy')} has been approved`,
+            userId: timeOffRequest.employeeId,
+            recipientRole: 'Employee',
+            category: 'timeoff',
+            priority: 'normal',
+            actionUrl: '/swap-shift',
+            actionText: 'View Request'
+          });
+          
+          await notificationService.createNotification(employeeNotification);
+        }
       }
       setNotification({ type: 'success', message: 'Request approved' });
     } catch (error) {
@@ -131,8 +251,46 @@ const SwapShift = ({
     try {
       if (type === 'swap') {
         await onUpdateSwapRequestStatus(requestId, 'rejected', user.id || 'manager');
+        
+        // Find the swap request to get employee info
+        const swapRequest = swapRequests.find(req => req.id === requestId);
+        if (swapRequest) {
+          // Create notification for the employee
+          const employeeNotification = new Notification({
+            type: 'error',
+            title: 'Swap Request Rejected',
+            message: `Your shift swap request for ${format(parseISO(swapRequest.shiftDate), 'MMM dd, yyyy')} has been rejected`,
+            userId: swapRequest.requesterId,
+            recipientRole: 'Employee',
+            category: 'swap',
+            priority: 'normal',
+            actionUrl: '/swap-shift',
+            actionText: 'View Request'
+          });
+          
+          await notificationService.createNotification(employeeNotification);
+        }
       } else {
         await onUpdateTimeOffRequestStatus(requestId, 'rejected', user.id || 'manager');
+        
+        // Find the time-off request to get employee info
+        const timeOffRequest = timeOffRequests.find(req => req.id === requestId);
+        if (timeOffRequest) {
+          // Create notification for the employee
+          const employeeNotification = new Notification({
+            type: 'error',
+            title: 'Time-Off Request Rejected',
+            message: `Your time-off request from ${format(parseISO(timeOffRequest.startDate), 'MMM dd, yyyy')} to ${format(parseISO(timeOffRequest.endDate), 'MMM dd, yyyy')} has been rejected`,
+            userId: timeOffRequest.employeeId,
+            recipientRole: 'Employee',
+            category: 'timeoff',
+            priority: 'normal',
+            actionUrl: '/swap-shift',
+            actionText: 'View Request'
+          });
+          
+          await notificationService.createNotification(employeeNotification);
+        }
       }
       setNotification({ type: 'success', message: 'Request rejected' });
     } catch (error) {
@@ -159,9 +317,12 @@ const SwapShift = ({
   const visibleSwapRequests = isAdminOrManager
     ? swapRequests
     : swapRequests.filter(req => req.requesterId === user.id);
+  // Populate employee names for all time off requests to fix "Unknown Employee" issue
+  const timeOffRequestsWithEmployeeNames = populateEmployeeNames(timeOffRequests, employees);
+  
   const visibleTimeOffRequests = isAdminOrManager
-    ? timeOffRequests
-    : timeOffRequests.filter(req => req.employeeId === user.id);
+    ? timeOffRequestsWithEmployeeNames
+    : timeOffRequestsWithEmployeeNames.filter(req => req.employeeId === user.id);
   const visibleUpcomingShifts = isAdminOrManager
     ? getUpcomingShifts()
     : getUpcomingShifts().filter(shift => shift.employeeId === user.id);
@@ -284,38 +445,41 @@ const SwapShift = ({
               </div>
             ) : (
               <div className="space-y-4">
-                {visibleSwapRequests.map(request => (
-                  <div key={request.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-medium text-gray-900">{request.requesterName}</h3>
-                        <p className="text-sm text-gray-600">
-                          {format(parseISO(request.shiftDate), 'MMM dd, yyyy')} • {request.shiftTime}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">{request.reason}</p>
+                {visibleSwapRequests.map(request => {
+                  const employee = employees.find(emp => emp.id === request.requesterId);
+                  return (
+                    <div key={request.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{request.requesterName || employee?.name || 'Unknown Employee'}</h3>
+                          <p className="text-sm text-gray-600">
+                            {format(parseISO(request.shiftDate), 'MMM dd, yyyy')} • {request.shiftTime}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">{request.reason}</p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(request.status)}`}>
+                          {request.status}
+                        </span>
                       </div>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(request.status)}`}>
-                        {request.status}
-                      </span>
+                      {request.status === 'pending' && isAdminOrManager && (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleApproveRequest(request.id, 'swap')}
+                            className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectRequest(request.id, 'swap')}
+                            className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {request.status === 'pending' && isAdminOrManager && (
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleApproveRequest(request.id, 'swap')}
-                          className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleRejectRequest(request.id, 'swap')}
-                          className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -335,38 +499,40 @@ const SwapShift = ({
               </div>
             ) : (
               <div className="space-y-4">
-                {visibleTimeOffRequests.map(request => (
-                  <div key={request.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-medium text-gray-900">{request.employeeName}</h3>
-                        <p className="text-sm text-gray-600">
-                          {format(parseISO(request.startDate), 'MMM dd')} - {format(parseISO(request.endDate), 'MMM dd, yyyy')}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">{request.reason}</p>
+                {visibleTimeOffRequests.map(request => {
+                  return (
+                    <div key={request.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{request.employeeName || 'Unknown Employee'}</h3>
+                          <p className="text-sm text-gray-600">
+                            {format(parseISO(request.startDate), 'MMM dd')} - {format(parseISO(request.endDate), 'MMM dd, yyyy')}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">{request.reason}</p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(request.status)}`}>
+                          {request.status}
+                        </span>
                       </div>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(request.status)}`}>
-                        {request.status}
-                      </span>
+                      {request.status === 'pending' && isAdminOrManager && (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleApproveRequest(request.id, 'timeoff')}
+                            className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectRequest(request.id, 'timeoff')}
+                            className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {request.status === 'pending' && isAdminOrManager && (
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleApproveRequest(request.id, 'timeoff')}
-                          className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleRejectRequest(request.id, 'timeoff')}
-                          className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -387,22 +553,24 @@ const SwapShift = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibleUpcomingShifts.map(shift => (
-                <div key={shift.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-medium text-gray-900">{shift.employeeName}</h3>
-                      <p className="text-sm text-gray-600">
-                        {format(parseISO(shift.date), 'MMM dd, yyyy')}
-                      </p>
-                      <p className="text-sm text-gray-600">{shift.startTime} - {shift.endTime}</p>
-                      <span className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full mt-2">
-                        {shift.role}
-                      </span>
+              {visibleUpcomingShifts.map(shift => {
+                return (
+                  <div key={shift.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{shift.employeeName || 'Unknown Employee'}</h3>
+                        <p className="text-sm text-gray-600">
+                          {format(parseISO(shift.date), 'MMM dd, yyyy')}
+                        </p>
+                        <p className="text-sm text-gray-600">{shift.startTime} - {shift.endTime}</p>
+                        <span className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full mt-2">
+                          {shift.role}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

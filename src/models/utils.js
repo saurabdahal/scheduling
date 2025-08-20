@@ -142,3 +142,147 @@ export const groupModelsByProperty = (models, property) => {
     return groups;
   }, {});
 };
+
+/**
+ * Utility function to populate employee names from employee IDs
+ * This fixes the "Unknown Employee" issue by looking up employee names
+ * @param {Array} records - Array of records (shifts, time off requests, etc.)
+ * @param {Array} employees - Array of employee objects
+ * @returns {Array} - Updated records with proper employee names
+ */
+export function populateEmployeeNames(records, employees) {
+  if (!records || !employees) return records;
+  
+  return records.map(record => {
+    // Handle records with employeeId/employeeName (shifts, time off requests, payroll)
+    if (record.employeeId && !record.employeeName) {
+      const employee = employees.find(emp => emp.id === record.employeeId);
+      if (employee) {
+        return { ...record, employeeName: employee.name };
+      }
+    }
+    
+    // Handle records with requesterId/requesterName (swap requests)
+    if (record.requesterId && !record.requesterName) {
+      const employee = employees.find(emp => emp.id === record.requesterId);
+      if (employee) {
+        return { ...record, requesterName: employee.name };
+      }
+    }
+    
+    return record;
+  });
+}
+
+/**
+ * Utility function to get employee name by ID
+ * @param {number} employeeId - The employee ID to look up
+ * @param {Array} employees - Array of employee objects
+ * @returns {string} - Employee name or "Unknown Employee" if not found
+ */
+export function getEmployeeName(employeeId, employees) {
+  if (!employeeId || !employees) return "Unknown Employee";
+  
+  const employee = employees.find(emp => emp.id === employeeId);
+  return employee ? employee.name : "Unknown Employee";
+}
+
+/**
+ * Utility function to get employee by ID
+ * @param {number} employeeId - The employee ID to look up
+ * @param {Array} employees - Array of employee objects
+ * @returns {Object|null} - Employee object or null if not found
+ */
+export function getEmployeeById(employeeId, employees) {
+  if (!employeeId || !employees) return null;
+  
+  return employees.find(emp => emp.id === employeeId) || null;
+}
+
+/**
+ * Fix existing data that has "Unknown" employee names
+ * This function should be called when the app loads to fix any existing data issues
+ * @param {Array} records - Array of records (shifts, time off requests, etc.)
+ * @param {Array} employees - Array of employee objects
+ * @returns {Array} - Updated records with proper employee names
+ */
+export function fixUnknownEmployeeNames(records, employees) {
+  if (!records || !employees) return records;
+  
+  return records.map(record => {
+    // Handle records with employeeId/employeeName (shifts, time off requests, payroll)
+    if (record.employeeId && (record.employeeName === 'Unknown' || !record.employeeName)) {
+      const employee = employees.find(emp => emp.id === record.employeeId);
+      if (employee) {
+        return { ...record, employeeName: employee.name };
+      }
+    }
+    
+    // Handle records with requesterId/requesterName (swap requests)
+    if (record.requesterId && (record.requesterName === 'Unknown' || !record.requesterName)) {
+      const employee = employees.find(emp => emp.id === record.requesterId);
+      if (employee && employee.name) {
+        return { ...record, requesterName: employee.name };
+      }
+    }
+    
+    return record;
+  });
+}
+
+/**
+ * Link users to employees by email to establish proper relationships
+ * This function should be called when the app loads to fix any existing data issues
+ * @param {Array} users - Array of user objects
+ * @param {Array} employees - Array of employee objects
+ * @returns {Array} - Updated employees with proper userId links
+ */
+export function linkUsersToEmployees(users, employees) {
+  if (!users || !employees) return employees;
+  
+  return employees.map(employee => {
+    // Try to find a user with matching email
+    const matchingUser = users.find(user => user.email === employee.email);
+    if (matchingUser && !employee.userId) {
+      return { ...employee, userId: matchingUser.id };
+    }
+    return employee;
+  });
+}
+
+/**
+ * Get employee name by user ID, linking through email if necessary
+ * @param {number} userId - The user ID to look up
+ * @param {Array} users - Array of user objects
+ * @param {Array} employees - Array of employee objects
+ * @returns {string} - Employee name or "Unknown Employee" if not found
+ */
+export function getEmployeeNameByUserId(userId, users, employees) {
+  if (!userId || !users || !employees) return "Unknown Employee";
+  
+  // First try to find employee directly by userId
+  let employee = employees.find(emp => emp.userId === userId);
+  
+  // If not found, try to find by linking through email
+  if (!employee) {
+    const user = users.find(u => u.id === userId);
+    if (user && user.email) {
+      employee = employees.find(emp => emp.email === user.email);
+    }
+  }
+  
+  return employee ? employee.name : "Unknown Employee";
+}
+
+/**
+ * Get employee name by user email
+ * @param {string} userEmail - User email
+ * @param {Array} employees - Array of employee objects
+ * @returns {string} - Employee name or fallback
+ */
+export function getEmployeeNameByEmail(userEmail, employees) {
+  if (!userEmail || !employees) return null;
+  
+  const employee = employees.find(emp => emp.email === userEmail);
+  return employee ? employee.name : null;
+}

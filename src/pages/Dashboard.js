@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 const Dashboard = ({ user, employees = [], shifts = [], notifications: appNotifications = [] }) => {
   const navigate = useNavigate();
@@ -77,12 +77,60 @@ const Dashboard = ({ user, employees = [], shifts = [], notifications: appNotifi
       
       setRecentShifts(recent);
       
-      // Use app notifications if available
+      // Use app notifications if available - show only latest 3 unread or recent
       if (appNotifications.length > 0) {
-        setNotifications(appNotifications.slice(0, 3));
+        console.log('=== DASHBOARD NOTIFICATION FILTERING ===');
+        console.log('Total app notifications:', appNotifications.length);
+        console.log('Current user:', user.id, user.role);
+        
+        const userNotifications = appNotifications.filter(notification => {
+          // Skip invalid notifications (null id, null userId, etc.)
+          if (!notification.id || (notification.userId === null && notification.recipientType !== 'all')) {
+            console.log(`Skipping invalid notification:`, notification.id);
+            return false;
+          }
+          
+          // Check if notification is for this user by ID (check both userId and recipientId fields)
+          const isForThisUser = notification.userId === user.id || notification.recipientId === user.id;
+          
+          // Check if notification is for this user's role
+          const isForThisRole = !notification.recipientRole || notification.recipientRole === user.role;
+          
+          // Check if notification is for all users
+          const isForAll = notification.recipientType === 'all';
+          
+          // Include notification if it's for this user or their role or for all users
+          const shouldInclude = isForThisUser || (isForThisRole && isForAll);
+          
+          console.log(`Dashboard Notification ${notification.id}:`, {
+            userId: notification.userId,
+            currentUserId: user.id,
+            recipientRole: notification.recipientRole,
+            currentUserRole: user.role,
+            isRead: notification.isRead,
+            isForThisUser,
+            isForThisRole,
+            isForAll,
+            shouldInclude
+          });
+          
+          return shouldInclude;
+        });
+        
+        console.log('User notifications after filtering:', userNotifications.length);
+        
+        // Sort by creation date (newest first) and take latest 3
+        const sortedNotifications = userNotifications
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 3);
+        
+        console.log('Final dashboard notifications:', sortedNotifications.length);
+        console.log('=== END DASHBOARD FILTERING ===');
+        
+        setNotifications(sortedNotifications);
       }
     }
-  }, [employees, shifts, appNotifications]);
+  }, [employees, shifts, appNotifications, user.id, user.role]);
 
   const getStatusColor = (status) => {
     const colors = {

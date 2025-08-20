@@ -65,72 +65,6 @@
     "updatedAt": "2025-08-19T20:08:16.015Z"
   },
   {
-    "id": 1755636660256,
-    "name": "Cheick",
-    "email": "cheick.maa@cambriancollege.ca",
-    "phone": "(555) 456-7890",
-    "emergencyContact": "asdf",
-    "emergencyPhone": "5551234567",
-    "role": "Employee",
-    "hourlyRate": "15.5",
-    "departments": [
-      "kitchen",
-      "coffee-making",
-      "food-prep"
-    ],
-    "availability": {
-      "monday": {
-        "available": true,
-        "startTime": "09:00",
-        "endTime": "17:00",
-        "notes": ""
-      },
-      "tuesday": {
-        "available": true,
-        "startTime": "09:00",
-        "endTime": "17:00",
-        "notes": ""
-      },
-      "wednesday": {
-        "available": true,
-        "startTime": "09:00",
-        "endTime": "17:00",
-        "notes": ""
-      },
-      "thursday": {
-        "available": true,
-        "startTime": "09:00",
-        "endTime": "17:00",
-        "notes": ""
-      },
-      "friday": {
-        "available": true,
-        "startTime": "09:00",
-        "endTime": "17:00",
-        "notes": ""
-      },
-      "saturday": {
-        "available": false,
-        "startTime": "09:00",
-        "endTime": "17:00",
-        "notes": ""
-      },
-      "sunday": {
-        "available": false,
-        "startTime": "09:00",
-        "endTime": "17:00",
-        "notes": ""
-      }
-    },
-    "status": "active",
-    "hireDate": "2025-08-19",
-    "terminationDate": null,
-    "userId": null,
-    "notes": "",
-    "createdAt": "2025-08-19T20:51:00.256Z",
-    "updatedAt": "2025-08-19T20:51:00.256Z"
-  },
-  {
     "id": 1755637847167,
     "name": "Saurab",
     "email": "saurab.test@cambriancollege.ca",
@@ -194,5 +128,70 @@
     "notes": "",
     "createdAt": "2025-08-19T21:10:47.167Z",
     "updatedAt": "2025-08-19T21:10:47.167Z"
+  },
+  {
+    "id": 1755642783198,
+    "name": "Suman Humagain",
+    "email": "sumanhuman.sudbury@gmail.com",
+    "phone": "6475538666",
+    "emergencyContact": "",
+    "emergencyPhone": "",
+    "role": "Employee",
+    "hourlyRate": "44",
+    "departments": [
+      "barista",
+      "customer-service"
+    ],
+    "availability": {
+      "monday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "tuesday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "wednesday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "thursday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "friday": {
+        "available": true,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "saturday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      },
+      "sunday": {
+        "available": false,
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "notes": ""
+      }
+    },
+    "status": "active",
+    "hireDate": "2025-08-19",
+    "terminationDate": null,
+    "userId": null,
+    "notes": "",
+    "createdAt": "2025-08-19T22:33:03.198Z",
+    "updatedAt": "2025-08-19T22:33:03.198Z"
   }
 ]

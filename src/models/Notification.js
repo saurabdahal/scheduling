@@ -4,7 +4,7 @@
  */
 export class Notification {
   constructor(data = {}) {
-    this.id = data.id || null;
+    this.id = data.id || Date.now();
     this.type = data.type || 'info'; // success, error, warning, info
     this.title = data.title || '';
     this.message = data.message || '';

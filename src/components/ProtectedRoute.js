@@ -1,8 +1,14 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
 const ProtectedRoute = ({ user, children }) => {
-  if (!user) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  
+  if (!user) {
+    // Save the attempted URL to redirect back after login
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  
   return children;
 };
 

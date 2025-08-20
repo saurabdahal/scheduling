@@ -9,13 +9,7 @@ const Payroll = ({ user, employees = [], shifts = [], payrollRecords = [], onUpd
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
   // Employees and shifts now come from props (App state)
 
-  const [selectedEmployees, setSelectedEmployees] = useState(() => {
-    if (isAdminOrManager) {
-      return employees.map(emp => emp.id);
-    } else {
-      return user?.id ? [user.id] : [];
-    }
-  });
+  const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [payrollPeriod, setPayrollPeriod] = useState('week');
   const [customDateRange, setCustomDateRange] = useState({
     startDate: format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
@@ -26,24 +20,27 @@ const Payroll = ({ user, employees = [], shifts = [], payrollRecords = [], onUpd
   const [notification, setNotification] = useState(null);
   const [noShiftsFound, setNoShiftsFound] = useState(false);
 
-  // Debug: Log shifts when component mounts
+  // Initialize selected employees when employees data becomes available (only once)
   useEffect(() => {
-    console.log('Loaded shifts:', shifts);
-    console.log('Current date range:', getDateRange());
-    console.log('Selected employees:', selectedEmployees);
-    
-    // Auto-generate payroll data for the current week
-    if (selectedEmployees.length > 0) {
-      generatePayroll();
+    if (employees.length > 0 && selectedEmployees.length === 0) {
+      if (isAdminOrManager) {
+        setSelectedEmployees(employees.map(emp => emp.id));
+      } else if (user?.id) {
+        setSelectedEmployees([user.id]);
+      }
     }
+  }, [employees, isAdminOrManager, user?.id]); // Removed selectedEmployees.length dependency
+
+  // Clear payroll data when employees change
+  useEffect(() => {
+    setPayrollData([]);
+    setNoShiftsFound(false);
   }, [selectedEmployees]);
 
-  // Auto-generate payroll when date range changes
+  // Clear payroll data when date range changes
   useEffect(() => {
-    if (selectedEmployees.length > 0) {
-      console.log('Date range changed, regenerating payroll...');
-      generatePayroll();
-    }
+    setPayrollData([]);
+    setNoShiftsFound(false);
   }, [payrollPeriod, customDateRange]);
 
   // Calculate hours worked
@@ -85,16 +82,25 @@ const Payroll = ({ user, employees = [], shifts = [], payrollRecords = [], onUpd
     }
   };
 
-  // Generate payroll data
-  const generatePayroll = () => {
+  // Generate payroll data (internal function, no notifications)
+  const generatePayrollData = (showNotification = false) => {
     if (selectedEmployees.length === 0) {
-      setNotification({ type: 'error', message: 'Please select at least one employee' });
+      if (showNotification) {
+        setNotification({ type: 'error', message: 'Please select at least one employee' });
+      }
       return;
     }
     setIsGenerating(true);
     const dateRange = getDateRange();
     const payroll = selectedEmployees.map(employeeId => {
       const employee = employees.find(e => e.id === employeeId);
+      
+      // Guard against undefined employee
+      if (!employee) {
+        console.warn(`Employee with ID ${employeeId} not found in employees list`);
+        return null;
+      }
+      
       const employeeShifts = shifts.filter(shift =>
         shift.employeeId === employeeId &&
         parseISO(shift.date) >= parseISO(dateRange.startDate) &&
@@ -138,20 +144,29 @@ const Payroll = ({ user, employees = [], shifts = [], payrollRecords = [], onUpd
           };
         })
       };
-    });
+    }).filter(Boolean); // Remove null entries
     setPayrollData(payroll);
     setIsGenerating(false);
     setNoShiftsFound(payroll.every(emp => emp.shifts === 0));
-    setNotification({ type: 'success', message: 'Payroll generated successfully' });
     
-    // Create notification for payroll ready
-    if (payroll.length > 0) {
+    // Only show success notification if explicitly requested
+    if (showNotification) {
+      setNotification({ type: 'success', message: 'Payroll generated successfully' });
+    }
+    
+    // Create notification for payroll ready (only when manually generated)
+    if (payroll.length > 0 && showNotification) {
       const notification = Notification.createPayrollReady(
         payroll[0].employeeName,
         `${dateRange.startDate} to ${dateRange.endDate}`
       );
       console.log('Payroll ready notification:', notification.toJSON());
     }
+  };
+
+  // Generate payroll data manually (with notification)
+  const generatePayroll = () => {
+    generatePayrollData(true);
   };
 
   // Generate PDF
@@ -286,20 +301,31 @@ const Payroll = ({ user, employees = [], shifts = [], payrollRecords = [], onUpd
 
   // Handle employee selection
   const handleEmployeeSelection = (employeeId) => {
+    console.log('Employee selection clicked:', employeeId);
+    console.log('Current selected employees:', selectedEmployees);
+    
     if (selectedEmployees.includes(employeeId)) {
-      setSelectedEmployees(selectedEmployees.filter(id => id !== employeeId));
+      const newSelection = selectedEmployees.filter(id => id !== employeeId);
+      console.log('Removing employee, new selection:', newSelection);
+      setSelectedEmployees(newSelection);
     } else {
-      setSelectedEmployees([...selectedEmployees, employeeId]);
+      const newSelection = [...selectedEmployees, employeeId];
+      console.log('Adding employee, new selection:', newSelection);
+      setSelectedEmployees(newSelection);
     }
   };
 
   // Select all employees
   const selectAllEmployees = () => {
-    setSelectedEmployees(employees.map(emp => emp.id));
+    console.log('Select All clicked - employees:', employees);
+    const allEmployeeIds = employees.map(emp => emp.id);
+    console.log('Setting selected employees to:', allEmployeeIds);
+    setSelectedEmployees(allEmployeeIds);
   };
 
   // Clear selection
   const clearSelection = () => {
+    console.log('Clear All clicked - clearing selection');
     setSelectedEmployees([]);
   };
 
@@ -499,17 +525,24 @@ const Payroll = ({ user, employees = [], shifts = [], payrollRecords = [], onUpd
       {/* Employee Selection */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Select Employees</h2>
+          <div className="flex items-center space-x-3">
+            <h2 className="text-lg font-semibold text-gray-900">Select Employees</h2>
+            <span className="text-sm text-gray-500">
+              {selectedEmployees.length} of {employees.length} selected
+            </span>
+          </div>
           <div className="flex space-x-2">
             <button
               onClick={selectAllEmployees}
-              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+              disabled={selectedEmployees.length === employees.length}
+              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
             >
               Select All
             </button>
             <button
               onClick={clearSelection}
-              className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              disabled={selectedEmployees.length === 0}
+              className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
             >
               Clear All
             </button>

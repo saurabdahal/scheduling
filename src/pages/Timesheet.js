@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { format, startOfWeek, endOfWeek, parseISO, addWeeks, subWeeks } from 'date-fns';
 import ShiftCard from '../components/ShiftCard';
 import NotificationBanner from '../components/NotificationBanner';
 
 import dataService from '../services/DataService.js';
+import { populateEmployeeNames } from '../models/utils.js';
 
 const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
   const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
@@ -24,18 +25,26 @@ const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
     endDate: format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
   });
   const [notification, setNotification] = useState(null);
+  
+  // Add state for edit and delete confirmation
+  const [editingShift, setEditingShift] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [shiftToDelete, setShiftToDelete] = useState(null);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
 
   // No demo shift generation; this page only displays shifts it receives
 
+  // Populate employee names for all shifts to fix "Unknown Employee" issue
+  const shiftsWithEmployeeNames = populateEmployeeNames(shifts, employees);
+  
   const filteredShifts = isAdminOrManager
-    ? shifts.filter(shift =>
+    ? shiftsWithEmployeeNames.filter(shift =>
         (selectedEmployeeId === 'all' || shift.employeeId === parseInt(selectedEmployeeId)) &&
         (selectedStatus === 'all' || shift.status === selectedStatus)
       )
-    : shifts.filter(shift =>
+    : shiftsWithEmployeeNames.filter(shift =>
         shift.employeeId === currentEmployee?.id &&
         (selectedStatus === 'all' || shift.status === selectedStatus)
       );
@@ -44,15 +53,7 @@ const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
     ? employees
     : employees.filter(e => e.id === currentEmployee?.id);
     
-  // Debug logging for employee filtering
-  console.log('Timesheet employee filtering debug:', {
-    user: { id: user.id, email: user.email, role: user.role },
-    currentEmployee: currentEmployee ? { id: currentEmployee.id, name: currentEmployee.name, email: currentEmployee.email } : null,
-    totalShifts: shifts.length,
-    filteredShifts: filteredShifts.length,
-    summaryEmployees: summaryEmployees.length,
-    isAdminOrManager
-  });
+
 
   const calculateHours = (startTime, endTime) => {
     const start = parseISO(`2000-01-01T${startTime}`);
@@ -88,30 +89,40 @@ const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
     }
   };
 
-  const handleUpdateActualTimes = async (shiftId, actualStartTime, actualEndTime) => {
-    try {
-      const updated = shifts.map(shift => 
-        shift.id === shiftId ? { ...shift, actualStartTime, actualEndTime } : shift
-      );
-      const shift = updated.find(s => s.id === shiftId);
-      if (shift) {
-        await dataService.saveShift(shift);
-      }
-      onUpdateShifts(updated);
-      setNotification({ type: 'success', message: 'Actual times updated' });
-    } catch (error) {
-      setNotification({ type: 'error', message: 'Failed to update actual times' });
+
+
+  // Handle edit shift
+  const handleEditShift = (shift) => {
+    if (!isAdminOrManager) {
+      setNotification({ type: 'error', message: 'You do not have permission to edit shifts' });
+      return;
     }
+    setEditingShift(shift);
+    // Navigate to shifts page for editing
+    window.location.href = `/shifts?edit=${shift.id}`;
   };
 
-  const handleDeleteShift = async (shiftId) => {
+  // Handle delete shift with confirmation
+  const handleDeleteShift = (shiftId) => {
+    if (!isAdminOrManager) {
+      setNotification({ type: 'error', message: 'You do not have permission to delete shifts' });
+      return;
+    }
+    setShiftToDelete(shiftId);
+    setShowDeleteConfirm(true);
+  };
+
+  // Confirm delete shift
+  const confirmDeleteShift = async () => {
+    if (!shiftToDelete) return;
+    
     try {
-      console.log('Timesheet: Attempting to delete shift:', shiftId);
-      const result = await dataService.delete('shifts', shiftId);
+      console.log('Timesheet: Attempting to delete shift:', shiftToDelete);
+      const result = await dataService.delete('shifts', shiftToDelete);
       console.log('Timesheet: Delete result:', result);
       
       if (result) {
-        const updatedShifts = shifts.filter(s => s.id !== shiftId);
+        const updatedShifts = shifts.filter(s => s.id !== shiftToDelete);
         onUpdateShifts(updatedShifts);
         setNotification({ type: 'success', message: 'Shift deleted successfully' });
       } else {
@@ -120,7 +131,16 @@ const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
     } catch (error) {
       console.error('Timesheet: Error deleting shift:', error);
       setNotification({ type: 'error', message: `Failed to delete shift: ${error.message}` });
+    } finally {
+      setShowDeleteConfirm(false);
+      setShiftToDelete(null);
     }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setShiftToDelete(null);
   };
 
   const generateReport = () => {
@@ -202,18 +222,7 @@ const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Debug Info - Remove this in production */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 text-sm">
-          <h3 className="font-semibold mb-2">Timesheet Debug Info:</h3>
-          <p>User Role: {user?.role}</p>
-          <p>Current Employee: {currentEmployee ? `${currentEmployee.name} (ID: ${currentEmployee.id})` : 'Not found'}</p>
-          <p>Total Shifts: {shifts?.length || 0}</p>
-          <p>Filtered Shifts: {filteredShifts?.length || 0}</p>
-          <p>Summary Employees: {summaryEmployees?.length || 0}</p>
-          <p>Selected Employee ID: {selectedEmployeeId}</p>
-        </div>
-      )}
+
       
       {/* Header */}
       <div className="flex justify-between items-center">
@@ -377,10 +386,13 @@ const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
                    key={shift.id}
                    shift={shift}
                    employee={summaryEmployees.find(emp => emp.id === shift.employeeId)}
-                   onMarkAttendance={handleMarkAttendance}
+                   onEdit={handleEditShift}
                    onDelete={handleDeleteShift}
-                   isEditable={true}
+                   onMarkAttendance={handleMarkAttendance}
+                   isEditable={isAdminOrManager}
                    showActions={true}
+                   currentUser={user}
+                   currentEmployee={currentEmployee}
                  />
                ))}
             </div>
@@ -468,6 +480,36 @@ const Timesheet = ({ user, employees = [], shifts = [], onUpdateShifts }) => {
               <button
                 onClick={() => setShowReportModal(false)}
                 className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-semibold mb-4 text-red-600">Delete Shift</h2>
+            
+            <div className="mb-6">
+              <p className="text-gray-700">
+                Are you sure you want to delete this shift? This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={confirmDeleteShift}
+                className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors"
+              >
+                Delete Shift
+              </button>
+              <button
+                onClick={cancelDelete}
+                className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 transition-colors"
               >
                 Cancel
               </button>

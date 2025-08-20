@@ -79,8 +79,21 @@
     "password": "saurab378",
     "role": "Employee",
     "email": "saurab.test@cambriancollege.ca",
+    "firstName": "",
+    "lastName": "",
     "isActive": true,
     "createdAt": "2025-08-19T21:10:47.212Z",
+    "lastLogin": null,
+    "permissions": []
+  },
+  {
+    "id": 1755642783257,
+    "username": "sumanhuman.sudbury@gmail.com",
+    "password": "sumanhumagain623",
+    "role": "Employee",
+    "email": "sumanhuman.sudbury@gmail.com",
+    "isActive": true,
+    "createdAt": "2025-08-19T22:33:03.256Z",
     "lastLogin": null,
     "permissions": []
   }
